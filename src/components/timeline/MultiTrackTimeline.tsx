@@ -39,6 +39,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   const toggleSyncLinkedTextClips = useTimelineStore(
     (s) => s.toggleSyncLinkedTextClips
   );
+  const togglePlay = useTimelineStore((s) => s.togglePlay);
   const splitSelectedClipAtPlayhead = useTimelineStore(
     (s) => s.splitSelectedClipAtPlayhead
   );
@@ -47,11 +48,18 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   const deleteSelectedClip = useTimelineStore((s) => s.deleteSelectedClip);
   const addManualTextClip = useTimelineStore((s) => s.addManualTextClip);
   const moveClip = useTimelineStore((s) => s.moveClip);
+  const moveClipToTrack = useTimelineStore((s) => s.moveClipToTrack);
   const importMediaFile = useTimelineStore((s) => s.importMediaFile);
   const toggleTextTrackVisibility = useTimelineStore(
     (s) => s.toggleTextTrackVisibility
   );
   const updateClipTransition = useTimelineStore((s) => s.updateClipTransition);
+
+  const [draggingInfo, setDraggingInfo] = useState<{
+    isDragging: boolean;
+    trackType?: "video" | "audio" | "text";
+    hoveredTrackId?: string | null;
+  }>({ isDragging: false });
 
   const overlayFileInputRef = useRef<HTMLInputElement>(null);
   const audioFileInputRef = useRef<HTMLInputElement>(null);
@@ -175,6 +183,18 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
+      const isSpace =
+        e.code === "Space" ||
+        e.key === " " ||
+        e.key === "Spacebar" ||
+        e.keyCode === 32;
+
+      if (isSpace) {
+        e.preventDefault();
+        togglePlay();
+        return;
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         handleUndo();
@@ -205,6 +225,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     trimLeftAtPlayhead,
     trimRightAtPlayhead,
     deleteSelectedClip,
+    togglePlay,
   ]);
 
   // Ctrl + Scroll wheel to lengthen or shorten timeline
@@ -258,11 +279,19 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   const handleRulerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.stopPropagation();
+    const { isPlaying, setIsPlaying } = useTimelineStore.getState();
+    if (isPlaying) {
+      setIsPlaying(false);
+    }
     setIsScrubbing(true);
     updatePlayheadFromClientX(e.clientX);
   };
 
   const handleEmptyTrackClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const { isPlaying, setIsPlaying } = useTimelineStore.getState();
+    if (isPlaying) {
+      setIsPlaying(false);
+    }
     // Clicking outside any clip on empty track area deselects current clip/transition
     setSelectedClip(null);
     const container = tracksContainerRef.current;
@@ -304,9 +333,17 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   const overlayVideoTracks = videoTracks.filter((tr) => tr.isOverlay);
   const mainVideoTracks = videoTracks.filter((tr) => !tr.isOverlay);
 
+  const handleTimelineMouseDownCapture = () => {
+    const { isPlaying, setIsPlaying } = useTimelineStore.getState();
+    if (isPlaying) {
+      setIsPlaying(false);
+    }
+  };
+
   return (
     <section
       ref={timelineSectionRef}
+      onMouseDownCapture={handleTimelineMouseDownCapture}
       className="bg-[#18181b] border-t border-[#2a2a2e] flex flex-col justify-between select-none shrink-0"
       style={{ height: `${heightPx}px` }}
     >
@@ -499,6 +536,8 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           {manualTracks.map((track, idx) => (
             <TrackRow
               key={track.id}
+              id={track.id}
+              trackType="text"
               icon="T"
               title={
                 manualTracks.length > 1
@@ -506,12 +545,15 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   : t("tracks.manualText")
               }
               visible={track.visible}
+              isDropTarget={draggingInfo.hoveredTrackId === track.id}
               onToggleVisible={() => toggleTextTrackVisibility(track.id)}
             >
               {track.clips.map((clip) => (
                 <ClipBlock
                   key={clip.id}
                   id={clip.id}
+                  trackId={track.id}
+                  trackType="text"
                   label={clip.text}
                   startTime={clip.startTime}
                   endTime={clip.endTime}
@@ -528,24 +570,59 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   onMoveClip={(newStart) =>
                     moveClip("text", track.id, clip.id, newStart)
                   }
+                  onDropOnTrack={(srcId, targetId, newStart) =>
+                    moveClipToTrack("text", srcId, targetId, clip.id, newStart)
+                  }
+                  onDragStateChange={(isDragging, type, hoveredId) =>
+                    setDraggingInfo({
+                      isDragging,
+                      trackType: type,
+                      hoveredTrackId: hoveredId,
+                    })
+                  }
                 />
               ))}
             </TrackRow>
           ))}
 
+          {/* Dynamic Drop Zone to create new Text Line */}
+          {draggingInfo.isDragging && draggingInfo.trackType === "text" && (
+            <div className="flex items-center gap-2">
+              <div className="w-36 shrink-0 text-[11px] text-[#00c8d2] font-mono px-2">
+                + New Text Line
+              </div>
+              <div
+                data-track-id="new_text_track"
+                data-track-type="text"
+                className={`relative flex-1 h-7 border-2 border-dashed rounded flex items-center justify-center text-xs transition-colors select-none ${
+                  draggingInfo.hoveredTrackId === "new_text_track"
+                    ? "border-[#00c8d2] bg-[#00c8d2]/20 text-[#00c8d2] font-semibold"
+                    : "border-zinc-700 bg-zinc-900/40 text-zinc-400"
+                }`}
+              >
+                <span>+ {t("toolbar.addText")} (Drop here to create new line)</span>
+              </div>
+            </div>
+          )}
+
           {/* AI Captions - EN Track */}
           {enCaptionTracks.map((track) => (
             <TrackRow
               key={track.id}
+              id={track.id}
+              trackType="text"
               icon="💬"
               title={t("tracks.captionsEn")}
               visible={track.visible}
+              isDropTarget={draggingInfo.hoveredTrackId === track.id}
               onToggleVisible={() => toggleTextTrackVisibility(track.id)}
             >
               {track.clips.map((clip) => (
                 <ClipBlock
                   key={clip.id}
                   id={clip.id}
+                  trackId={track.id}
+                  trackType="text"
                   label={clip.text}
                   startTime={clip.startTime}
                   endTime={clip.endTime}
@@ -563,6 +640,16 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   onMoveClip={(newStart) =>
                     moveClip("text", track.id, clip.id, newStart)
                   }
+                  onDropOnTrack={(srcId, targetId, newStart) =>
+                    moveClipToTrack("text", srcId, targetId, clip.id, newStart)
+                  }
+                  onDragStateChange={(isDragging, type, hoveredId) =>
+                    setDraggingInfo({
+                      isDragging,
+                      trackType: type,
+                      hoveredTrackId: hoveredId,
+                    })
+                  }
                 />
               ))}
             </TrackRow>
@@ -572,15 +659,20 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           {viCaptionTracks.map((track) => (
             <TrackRow
               key={track.id}
+              id={track.id}
+              trackType="text"
               icon="💬"
               title={t("tracks.captionsVi")}
               visible={track.visible}
+              isDropTarget={draggingInfo.hoveredTrackId === track.id}
               onToggleVisible={() => toggleTextTrackVisibility(track.id)}
             >
               {track.clips.map((clip) => (
                 <ClipBlock
                   key={clip.id}
                   id={clip.id}
+                  trackId={track.id}
+                  trackType="text"
                   label={clip.text}
                   startTime={clip.startTime}
                   endTime={clip.endTime}
@@ -598,6 +690,16 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   onMoveClip={(newStart) =>
                     moveClip("text", track.id, clip.id, newStart)
                   }
+                  onDropOnTrack={(srcId, targetId, newStart) =>
+                    moveClipToTrack("text", srcId, targetId, clip.id, newStart)
+                  }
+                  onDragStateChange={(isDragging, type, hoveredId) =>
+                    setDraggingInfo({
+                      isDragging,
+                      trackType: type,
+                      hoveredTrackId: hoveredId,
+                    })
+                  }
                 />
               ))}
             </TrackRow>
@@ -607,12 +709,15 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           {overlayVideoTracks.map((track, idx) => (
             <TrackRow
               key={track.id}
+              id={track.id}
+              trackType="video"
               icon="🖼"
               title={
                 overlayVideoTracks.length > 1
                   ? `${t("tracks.overlayTrack")} ${idx + 1}`
                   : t("tracks.overlayTrack")
               }
+              isDropTarget={draggingInfo.hoveredTrackId === track.id}
               heightClass="h-8"
             >
               {track.clips.map((clip) => {
@@ -624,6 +729,8 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   <ClipBlock
                     key={clip.id}
                     id={clip.id}
+                    trackId={track.id}
+                    trackType="video"
                     label={`${badge} ${fileName}`}
                     startTime={clip.startTime}
                     endTime={clip.endTime}
@@ -640,18 +747,51 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                     onMoveClip={(newStart) =>
                       moveClip("video", track.id, clip.id, newStart)
                     }
+                    onDropOnTrack={(srcId, targetId, newStart) =>
+                      moveClipToTrack("video", srcId, targetId, clip.id, newStart)
+                    }
+                    onDragStateChange={(isDragging, type, hoveredId) =>
+                      setDraggingInfo({
+                        isDragging,
+                        trackType: type,
+                        hoveredTrackId: hoveredId,
+                      })
+                    }
                   />
                 );
               })}
             </TrackRow>
           ))}
 
+          {/* Dynamic Drop Zone to create new Video/Overlay Line */}
+          {draggingInfo.isDragging && draggingInfo.trackType === "video" && (
+            <div className="flex items-center gap-2">
+              <div className="w-36 shrink-0 text-[11px] text-[#00c8d2] font-mono px-2">
+                + New Overlay Line
+              </div>
+              <div
+                data-track-id="new_overlay_track"
+                data-track-type="video"
+                className={`relative flex-1 h-8 border-2 border-dashed rounded flex items-center justify-center text-xs transition-colors select-none ${
+                  draggingInfo.hoveredTrackId === "new_overlay_track"
+                    ? "border-[#00c8d2] bg-[#00c8d2]/20 text-[#00c8d2] font-semibold"
+                    : "border-zinc-700 bg-zinc-900/40 text-zinc-400"
+                }`}
+              >
+                <span>+ {t("toolbar.addOverlay")} (Drop here to create new line)</span>
+              </div>
+            </div>
+          )}
+
           {/* Main Video Track */}
           {mainVideoTracks.map((track) => (
             <TrackRow
               key={track.id}
+              id={track.id}
+              trackType="video"
               icon="🎞"
               title={t("tracks.mainVideo")}
+              isDropTarget={draggingInfo.hoveredTrackId === track.id}
               heightClass="h-12"
             >
               {track.clips.map((clip, idx) => {
@@ -668,6 +808,8 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   <ClipBlock
                     key={clip.id}
                     id={clip.id}
+                    trackId={track.id}
+                    trackType="video"
                     label={`${fileName} (${clip.playbackRate}x)`}
                     startTime={clip.startTime}
                     endTime={clip.endTime}
@@ -691,6 +833,19 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                         clip.transitionOut?.duration || 0.5
                       )
                     }
+                    onMoveClip={(newStart) =>
+                      moveClip("video", track.id, clip.id, newStart)
+                    }
+                    onDropOnTrack={(srcId, targetId, newStart) =>
+                      moveClipToTrack("video", srcId, targetId, clip.id, newStart)
+                    }
+                    onDragStateChange={(isDragging, type, hoveredId) =>
+                      setDraggingInfo({
+                        isDragging,
+                        trackType: type,
+                        hoveredTrackId: hoveredId,
+                      })
+                    }
                   />
                 );
               })}
@@ -701,12 +856,15 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           {audioTracks.map((track, idx) => (
             <TrackRow
               key={track.id}
+              id={track.id}
+              trackType="audio"
               icon="🎵"
               title={
                 audioTracks.length > 1
                   ? `${t("tracks.bgm")} ${idx + 1}`
                   : t("tracks.bgm")
               }
+              isDropTarget={draggingInfo.hoveredTrackId === track.id}
               heightClass="h-8"
             >
               {track.clips.map((clip) => {
@@ -717,6 +875,8 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   <ClipBlock
                     key={clip.id}
                     id={clip.id}
+                    trackId={track.id}
+                    trackType="audio"
                     label={`${fileName} (${Math.round(clip.volume * 100)}%)`}
                     startTime={clip.startTime}
                     endTime={clip.endTime}
@@ -733,11 +893,41 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                     onMoveClip={(newStart) =>
                       moveClip("audio", track.id, clip.id, newStart)
                     }
+                    onDropOnTrack={(srcId, targetId, newStart) =>
+                      moveClipToTrack("audio", srcId, targetId, clip.id, newStart)
+                    }
+                    onDragStateChange={(isDragging, type, hoveredId) =>
+                      setDraggingInfo({
+                        isDragging,
+                        trackType: type,
+                        hoveredTrackId: hoveredId,
+                      })
+                    }
                   />
                 );
               })}
             </TrackRow>
           ))}
+
+          {/* Dynamic Drop Zone to create new Audio Line */}
+          {draggingInfo.isDragging && draggingInfo.trackType === "audio" && (
+            <div className="flex items-center gap-2">
+              <div className="w-36 shrink-0 text-[11px] text-[#00c8d2] font-mono px-2">
+                + New Audio Line
+              </div>
+              <div
+                data-track-id="new_audio_track"
+                data-track-type="audio"
+                className={`relative flex-1 h-8 border-2 border-dashed rounded flex items-center justify-center text-xs transition-colors select-none ${
+                  draggingInfo.hoveredTrackId === "new_audio_track"
+                    ? "border-[#00c8d2] bg-[#00c8d2]/20 text-[#00c8d2] font-semibold"
+                    : "border-zinc-700 bg-zinc-900/40 text-zinc-400"
+                }`}
+              >
+                <span>+ {t("toolbar.addAudio")} (Drop here to create new line)</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </section>

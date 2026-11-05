@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { TopBar } from "./components/topbar/TopBar";
 import { AutoCaptionModal } from "./components/modals/AutoCaptionModal";
 import { VideoPreviewCanvas } from "./components/preview/VideoPreviewCanvas";
@@ -19,24 +19,60 @@ export const App: React.FC = () => {
   const [rightWidth, setRightWidth] = useState(320);
   const [timelineHeight, setTimelineHeight] = useState(275);
   const [activeDrag, setActiveDrag] = useState<DragHandleType>(null);
+  const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Global Spacebar shortcut to toggle video Play / Pause from anywhere
+  // Track global mouse position to allow Space play/pause anywhere the mouse is hovering
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener("mousemove", onMouseMove, { capture: true, passive: true });
+    return () =>
+      window.removeEventListener("mousemove", onMouseMove, { capture: true });
+  }, []);
+
+  // Global Spacebar shortcut to toggle video Play / Pause from anywhere the mouse is
   useEffect(() => {
     const onGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.code !== "Space") return;
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName;
-      if (
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT" ||
-        target?.isContentEditable
-      ) {
+      const isSpace =
+        e.code === "Space" ||
+        e.key === " " ||
+        e.key === "Spacebar" ||
+        e.keyCode === 32;
+
+      if (!isSpace) return;
+
+      const hoveredEl = document.elementFromPoint(
+        lastMousePosRef.current.x,
+        lastMousePosRef.current.y
+      );
+      const isHoveredInput = Boolean(
+        hoveredEl?.tagName === "INPUT" ||
+        hoveredEl?.tagName === "TEXTAREA" ||
+        hoveredEl?.closest("input, textarea, [contenteditable='true']")
+      );
+
+      const activeEl = document.activeElement as HTMLElement | null;
+      const isActiveInput = Boolean(
+        activeEl?.tagName === "INPUT" ||
+        activeEl?.tagName === "TEXTAREA" ||
+        activeEl?.isContentEditable
+      );
+
+      // Only allow native space typing if mouse is actively hovering over an active text input
+      if (isHoveredInput && isActiveInput) {
         return;
       }
+
       e.preventDefault();
-      const { isPlaying, setIsPlaying } = useTimelineStore.getState();
-      setIsPlaying(!isPlaying);
+      e.stopPropagation();
+
+      // Blur any active element (stray inputs, buttons, selects) to guarantee reliable play/pause
+      if (activeEl) {
+        activeEl.blur();
+      }
+
+      useTimelineStore.getState().togglePlay();
     };
 
     window.addEventListener("keydown", onGlobalKeyDown, { capture: true });

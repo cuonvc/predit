@@ -159,6 +159,7 @@ export const VideoPreviewCanvas: React.FC = () => {
   const selectedClip = useTimelineStore((s) => s.selectedClip);
   const setPlayheadTime = useTimelineStore((s) => s.setPlayheadTime);
   const setIsPlaying = useTimelineStore((s) => s.setIsPlaying);
+  const togglePlay = useTimelineStore((s) => s.togglePlay);
   const setSelectedClip = useTimelineStore((s) => s.setSelectedClip);
   const setAspectRatio = useTimelineStore((s) => s.setAspectRatio);
   const importMediaFile = useTimelineStore((s) => s.importMediaFile);
@@ -441,6 +442,7 @@ export const VideoPreviewCanvas: React.FC = () => {
       >
         <div
           ref={stageRef}
+          tabIndex={0}
           style={{
             aspectRatio: ASPECT_RATIO_CSS[project.aspectRatio],
             maxHeight: "100%",
@@ -449,6 +451,19 @@ export const VideoPreviewCanvas: React.FC = () => {
           onClick={(e) => {
             e.stopPropagation();
             setSelectedClip(null);
+            togglePlay();
+          }}
+          onKeyDown={(e) => {
+            const isSpace =
+              e.code === "Space" ||
+              e.key === " " ||
+              e.key === "Spacebar" ||
+              e.keyCode === 32;
+            if (isSpace) {
+              e.preventDefault();
+              e.stopPropagation();
+              togglePlay();
+            }
           }}
           onDragOver={(e) => {
             e.preventDefault();
@@ -456,9 +471,10 @@ export const VideoPreviewCanvas: React.FC = () => {
           }}
           onDragLeave={() => setIsPlayerDragOver(false)}
           onDrop={handlePlayerDrop}
-          className={`relative h-full bg-black border overflow-hidden transition-all ${
+          className={`relative h-full bg-black border overflow-hidden transition-all outline-none cursor-pointer ${
             isPlayerDragOver ? "border-[#00c8d2]" : "border-zinc-800"
           }`}
+          title="Click to play / pause video"
         >
           {/* Real or Simulated Video Frame */}
           {resolvedVideoSrc ? (
@@ -634,8 +650,12 @@ export const VideoPreviewCanvas: React.FC = () => {
             ⏮
           </button>
           <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            className="text-zinc-100 hover:text-white text-sm px-2"
+            onClick={(e) => {
+              (e.currentTarget as HTMLElement).blur();
+              togglePlay();
+            }}
+            className="text-zinc-100 hover:text-white text-sm px-2 focus:outline-none"
+            title="Play / Pause (Space)"
           >
             {isPlaying ? "⏸" : "▶"}
           </button>

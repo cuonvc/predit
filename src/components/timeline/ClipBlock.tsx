@@ -3,6 +3,8 @@ import { TransitionType } from "../../store/useTimelineStore";
 
 interface ClipBlockProps {
   id: string;
+  trackId?: string;
+  trackType?: "video" | "audio" | "text";
   label: string;
   startTime: number;
   endTime: number;
@@ -22,6 +24,16 @@ interface ClipBlockProps {
   onSelect: () => void;
   onCycleTransition?: () => void;
   onMoveClip?: (newStartTime: number) => void;
+  onDropOnTrack?: (
+    sourceTrackId: string,
+    targetTrackId: string,
+    newStartTime: number
+  ) => void;
+  onDragStateChange?: (
+    isDragging: boolean,
+    trackType?: "video" | "audio" | "text",
+    hoveredTrackId?: string | null
+  ) => void;
 }
 
 const VARIANT_CLASSES: Record<ClipBlockProps["variant"], string> = {
@@ -42,6 +54,9 @@ const TRANSITION_LABELS: Record<TransitionType, string> = {
 };
 
 export const ClipBlock: React.FC<ClipBlockProps> = ({
+  id,
+  trackId,
+  trackType,
   label,
   startTime,
   endTime,
@@ -54,17 +69,24 @@ export const ClipBlock: React.FC<ClipBlockProps> = ({
   onSelect,
   onCycleTransition,
   onMoveClip,
+  onDropOnTrack,
+  onDragStateChange,
 }) => {
-  const [dragOffsetPx, setDragOffsetPx] = React.useState<number | null>(null);
+  const [dragOffset, setDragOffset] = React.useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const dragStartRef = React.useRef<{
     startX: number;
+    startY: number;
     initialStart: number;
     moved: boolean;
   } | null>(null);
 
   const leftPx = startTime * pixelsPerSecond;
   const effectiveLeftPx =
-    dragOffsetPx !== null ? Math.max(0, leftPx + dragOffsetPx) : leftPx;
+    dragOffset !== null ? Math.max(0, leftPx + dragOffset.x) : leftPx;
+  const effectiveTopPx = dragOffset !== null ? dragOffset.y : 0;
   const widthPx = Math.max(24, (endTime - startTime) * pixelsPerSecond);
   const hasActiveTransition = transitionType && transitionType !== "none";
 
@@ -73,35 +95,66 @@ export const ClipBlock: React.FC<ClipBlockProps> = ({
     e.stopPropagation();
     onSelect();
 
-    if (!onMoveClip) return;
+    if (!onMoveClip && !onDropOnTrack) return;
     dragStartRef.current = {
       startX: e.clientX,
+      startY: e.clientY,
       initialStart: startTime,
       moved: false,
     };
 
+    let currentHoveredTrackId: string | null = null;
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!dragStartRef.current) return;
       const dx = moveEvent.clientX - dragStartRef.current.startX;
-      if (Math.abs(dx) > 3) {
+      const dy = moveEvent.clientY - dragStartRef.current.startY;
+
+      if (!dragStartRef.current.moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
         dragStartRef.current.moved = true;
-        setDragOffsetPx(dx);
+        onDragStateChange?.(true, trackType, null);
+      }
+
+      if (dragStartRef.current.moved) {
+        setDragOffset({ x: dx, y: dy });
+
+        // Identify track lane under cursor
+        const el = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+        const lane = el?.closest("[data-track-id]");
+        const hoveredId = lane?.getAttribute("data-track-id") || null;
+        const hoveredType = lane?.getAttribute("data-track-type");
+
+        if (hoveredType === trackType && hoveredId) {
+          currentHoveredTrackId = hoveredId;
+          onDragStateChange?.(true, trackType, hoveredId);
+        } else {
+          currentHoveredTrackId = null;
+          onDragStateChange?.(true, trackType, null);
+        }
       }
     };
 
     const handleMouseUp = (upEvent: MouseEvent) => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+
       if (dragStartRef.current && dragStartRef.current.moved) {
         const dx = upEvent.clientX - dragStartRef.current.startX;
         const newStart = Math.max(
           0,
           Number((dragStartRef.current.initialStart + dx / pixelsPerSecond).toFixed(2))
         );
-        onMoveClip(newStart);
+
+        if (currentHoveredTrackId && trackId && onDropOnTrack) {
+          onDropOnTrack(trackId, currentHoveredTrackId, newStart);
+        } else if (onMoveClip) {
+          onMoveClip(newStart);
+        }
       }
+
       dragStartRef.current = null;
-      setDragOffsetPx(null);
+      setDragOffset(null);
+      onDragStateChange?.(false);
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -117,12 +170,15 @@ export const ClipBlock: React.FC<ClipBlockProps> = ({
       }}
       style={{
         left: `${effectiveLeftPx}px`,
+        top: `${effectiveTopPx}px`,
         width: `${widthPx}px`,
       }}
-      className={`absolute rounded-sm border px-2 flex items-center justify-between text-xs select-none transition ${
+      className={`absolute rounded-sm border px-2 flex items-center justify-between text-xs select-none transition-none ${
         VARIANT_CLASSES[variant]
       } ${
-        dragOffsetPx !== null ? "cursor-ew-resize opacity-80 z-30" : "cursor-pointer"
+        dragOffset !== null
+          ? "cursor-grabbing opacity-90 shadow-2xl z-50 pointer-events-none ring-2 ring-white"
+          : "cursor-grab"
       } ${
         isSelected
           ? "ring-2 ring-[#00c8d2] border-[#00c8d2] z-20 brightness-110"

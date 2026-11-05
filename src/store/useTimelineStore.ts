@@ -132,6 +132,7 @@ export interface TimelineState {
   // Actions
   setPlayheadTime: (time: number) => void;
   setIsPlaying: (playing: boolean) => void;
+  togglePlay: () => void;
   setSelectedClip: (clip: SelectedClip | null) => void;
   setAspectRatio: (aspect: AspectRatioPreset) => void;
   setApplyStyleToAllTrack: (apply: boolean) => void;
@@ -179,6 +180,13 @@ export interface TimelineState {
   moveClip: (
     trackType: "video" | "audio" | "text",
     trackId: string,
+    clipId: string,
+    newStartTime: number
+  ) => void;
+  moveClipToTrack: (
+    trackType: "video" | "audio" | "text",
+    sourceTrackId: string,
+    targetTrackId: string,
     clipId: string,
     newStartTime: number
   ) => void;
@@ -488,6 +496,35 @@ export const useTimelineStore = create<TimelineState>()(
         set({ playheadTime: Math.max(0, Number(time.toFixed(2))) }),
 
       setIsPlaying: (isPlaying) => set({ isPlaying }),
+
+      togglePlay: () =>
+        set((state) => {
+          const maxVideoEnd = Math.max(
+            0,
+            ...state.videoTracks.flatMap((tr) => tr.clips.map((c) => c.endTime))
+          );
+          const maxAudioEnd = Math.max(
+            0,
+            ...state.audioTracks.flatMap((tr) => tr.clips.map((c) => c.endTime))
+          );
+          const maxTextEnd = Math.max(
+            0,
+            ...state.textTracks.flatMap((tr) => tr.clips.map((c) => c.endTime))
+          );
+          const totalDuration = Math.max(
+            5,
+            maxVideoEnd > 0
+              ? Math.max(maxVideoEnd, maxAudioEnd)
+              : Math.max(maxAudioEnd, maxTextEnd)
+          );
+
+          if (!state.isPlaying) {
+            const nextStart =
+              state.playheadTime >= totalDuration - 0.1 ? 0 : state.playheadTime;
+            return { isPlaying: true, playheadTime: nextStart };
+          }
+          return { isPlaying: false };
+        }),
 
       setSelectedClip: (selectedClip) => set({ selectedClip }),
 
@@ -1399,89 +1436,366 @@ export const useTimelineStore = create<TimelineState>()(
           };
         }),
 
-      moveClip: (trackType, trackId, clipId, newStartTime) =>
+      moveClip: (trackType, trackId, clipId, newStartTime) => {
+        get().moveClipToTrack(trackType, trackId, trackId, clipId, newStartTime);
+      },
+
+      moveClipToTrack: (
+        trackType,
+        sourceTrackId,
+        targetTrackId,
+        clipId,
+        newStartTime
+      ) =>
         set((state) => {
           const validStart = Math.max(0, Number(newStartTime.toFixed(2)));
 
+          // --- 1. TEXT CLIPS ---
           if (trackType === "text") {
-            const targetTrack = state.textTracks.find((tr) => tr.id === trackId);
-            const targetClip = targetTrack?.clips.find((c) => c.id === clipId);
-            if (!targetClip) return state;
+            const sourceTrack = state.textTracks.find((tr) => tr.id === sourceTrackId);
+            const clip = sourceTrack?.clips.find((c) => c.id === clipId);
+            if (!sourceTrack || !clip) return state;
 
-            const duration = targetClip.endTime - targetClip.startTime;
+            const duration = clip.endTime - clip.startTime;
             const validEnd = Number((validStart + duration).toFixed(2));
-            const timeDelta = Number((validStart - targetClip.startTime).toFixed(2));
+            const timeDelta = Number((validStart - clip.startTime).toFixed(2));
             const linkedGroupId = state.project.syncLinkedTextClips
-              ? targetClip.linkedGroupId
+              ? clip.linkedGroupId
               : null;
 
-            return {
-              textTracks: state.textTracks.map((tr) => {
-                const shouldCheck =
-                  tr.id === trackId ||
-                  (linkedGroupId && tr.clips.some((c) => c.linkedGroupId === linkedGroupId));
-                if (!shouldCheck) return tr;
+            const movedClip: TextClip = {
+              ...clip,
+              startTime: validStart,
+              endTime: validEnd,
+            };
 
-                return {
-                  ...tr,
-                  clips: tr.clips.map((c) => {
-                    if (c.id === clipId) {
-                      return { ...c, startTime: validStart, endTime: validEnd };
-                    }
-                    if (linkedGroupId && c.linkedGroupId === linkedGroupId) {
-                      const linkedStart = Math.max(
-                        0,
-                        Number((c.startTime + timeDelta).toFixed(2))
-                      );
-                      const linkedEnd = Number(
-                        (linkedStart + (c.endTime - c.startTime)).toFixed(2)
-                      );
-                      return { ...c, startTime: linkedStart, endTime: linkedEnd };
-                    }
-                    return c;
-                  }),
-                };
-              }),
+            // Dropped to create a new text line
+            if (targetTrackId === "new_text_track") {
+              const manualCount = state.textTracks.filter(
+                (tr) => tr.role === "manual_text"
+              ).length;
+              const newTrackId = `track_text_manual_${Date.now()}`;
+              const newTrack: TextTrack = {
+                id: newTrackId,
+                name: `Manual Titles ${manualCount + 1}`,
+                role: "manual_text",
+                visible: true,
+                locked: false,
+                stylePreset: { ...sourceTrack.stylePreset },
+                clips: [movedClip],
+              };
+
+              const nextTracks = state.textTracks
+                .map((tr) =>
+                  tr.id === sourceTrackId
+                    ? { ...tr, clips: tr.clips.filter((c) => c.id !== clipId) }
+                    : tr
+                )
+                .filter(
+                  (tr) =>
+                    tr.role !== "manual_text" ||
+                    tr.id === "track_text_manual" ||
+                    tr.clips.length > 0
+                );
+
+              const lastManualIdx = nextTracks
+                .map((t) => t.role)
+                .lastIndexOf("manual_text");
+              if (lastManualIdx >= 0) {
+                nextTracks.splice(lastManualIdx + 1, 0, newTrack);
+              } else {
+                nextTracks.unshift(newTrack);
+              }
+
+              return {
+                textTracks: nextTracks,
+                selectedClip: {
+                  trackType: "text",
+                  trackId: newTrackId,
+                  clipId: clip.id,
+                },
+              };
+            }
+
+            // Moving within same line
+            if (sourceTrackId === targetTrackId) {
+              return {
+                textTracks: state.textTracks.map((tr) => {
+                  const shouldCheck =
+                    tr.id === sourceTrackId ||
+                    (linkedGroupId &&
+                      tr.clips.some((c) => c.linkedGroupId === linkedGroupId));
+                  if (!shouldCheck) return tr;
+
+                  return {
+                    ...tr,
+                    clips: tr.clips
+                      .map((c) => {
+                        if (c.id === clipId) return movedClip;
+                        if (linkedGroupId && c.linkedGroupId === linkedGroupId) {
+                          const linkedStart = Math.max(
+                            0,
+                            Number((c.startTime + timeDelta).toFixed(2))
+                          );
+                          const linkedEnd = Number(
+                            (linkedStart + (c.endTime - c.startTime)).toFixed(2)
+                          );
+                          return {
+                            ...c,
+                            startTime: linkedStart,
+                            endTime: linkedEnd,
+                          };
+                        }
+                        return c;
+                      })
+                      .sort((a, b) => a.startTime - b.startTime),
+                  };
+                }),
+              };
+            }
+
+            // Moving to a different existing line
+            const nextTracks = state.textTracks
+              .map((tr) => {
+                if (tr.id === sourceTrackId) {
+                  return {
+                    ...tr,
+                    clips: tr.clips.filter((c) => c.id !== clipId),
+                  };
+                }
+                if (tr.id === targetTrackId) {
+                  return {
+                    ...tr,
+                    clips: [...tr.clips, movedClip].sort(
+                      (a, b) => a.startTime - b.startTime
+                    ),
+                  };
+                }
+                return tr;
+              })
+              .filter(
+                (tr) =>
+                  tr.role !== "manual_text" ||
+                  tr.id === "track_text_manual" ||
+                  tr.clips.length > 0
+              );
+
+            return {
+              textTracks: nextTracks,
+              selectedClip: {
+                trackType: "text",
+                trackId: targetTrackId,
+                clipId: clip.id,
+              },
             };
           }
 
+          // --- 2. VIDEO & IMAGE CLIPS ---
           if (trackType === "video") {
+            const sourceTrack = state.videoTracks.find((tr) => tr.id === sourceTrackId);
+            const clip = sourceTrack?.clips.find((c) => c.id === clipId);
+            if (!sourceTrack || !clip) return state;
+
+            const duration = clip.endTime - clip.startTime;
+            const validEnd = Number((validStart + duration).toFixed(2));
+            const movedClip: VideoClip = {
+              ...clip,
+              startTime: validStart,
+              endTime: validEnd,
+            };
+
+            // Dropped to create a new overlay line
+            if (targetTrackId === "new_overlay_track") {
+              const newTrackId = `track_vid_overlay_${Date.now()}`;
+              const newTrack: VideoTrack = {
+                id: newTrackId,
+                nameKey: "tracks.overlayTrack",
+                isOverlay: true,
+                clips: [movedClip],
+              };
+
+              const nextTracks = state.videoTracks
+                .map((tr) =>
+                  tr.id === sourceTrackId
+                    ? {
+                        ...tr,
+                        clips: tr.isOverlay
+                          ? tr.clips.filter((c) => c.id !== clipId)
+                          : packVideoClips(
+                              tr.clips.filter((c) => c.id !== clipId)
+                            ),
+                      }
+                    : tr
+                )
+                .filter(
+                  (tr) =>
+                    !tr.isOverlay ||
+                    tr.id === "track_vid_overlay" ||
+                    tr.clips.length > 0
+                );
+
+              const firstMainIdx = nextTracks.findIndex((tr) => !tr.isOverlay);
+              if (firstMainIdx >= 0) {
+                nextTracks.splice(firstMainIdx, 0, newTrack);
+              } else {
+                nextTracks.push(newTrack);
+              }
+
+              return {
+                videoTracks: nextTracks,
+                selectedClip: {
+                  trackType: "video",
+                  trackId: newTrackId,
+                  clipId: clip.id,
+                },
+              };
+            }
+
+            // Moving within same line
+            if (sourceTrackId === targetTrackId) {
+              return {
+                videoTracks: state.videoTracks.map((tr) => {
+                  if (tr.id !== sourceTrackId) return tr;
+                  return {
+                    ...tr,
+                    clips: tr.isOverlay
+                      ? tr.clips
+                          .map((c) => (c.id === clipId ? movedClip : c))
+                          .sort((a, b) => a.startTime - b.startTime)
+                      : packVideoClips(
+                          tr.clips.map((c) => (c.id === clipId ? movedClip : c))
+                        ),
+                  };
+                }),
+              };
+            }
+
+            // Moving to another existing line
+            const nextTracks = state.videoTracks
+              .map((tr) => {
+                if (tr.id === sourceTrackId) {
+                  const filtered = tr.clips.filter((c) => c.id !== clipId);
+                  return {
+                    ...tr,
+                    clips: tr.isOverlay ? filtered : packVideoClips(filtered),
+                  };
+                }
+                if (tr.id === targetTrackId) {
+                  return {
+                    ...tr,
+                    clips: tr.isOverlay
+                      ? [...tr.clips, movedClip].sort(
+                          (a, b) => a.startTime - b.startTime
+                        )
+                      : packVideoClips([...tr.clips, movedClip]),
+                  };
+                }
+                return tr;
+              })
+              .filter(
+                (tr) =>
+                  !tr.isOverlay ||
+                  tr.id === "track_vid_overlay" ||
+                  tr.clips.length > 0
+              );
+
             return {
-              videoTracks: state.videoTracks.map((tr) => {
-                if (tr.id !== trackId) return tr;
-                return {
-                  ...tr,
-                  clips: tr.clips.map((c) => {
-                    if (c.id !== clipId) return c;
-                    const dur = c.endTime - c.startTime;
-                    return {
-                      ...c,
-                      startTime: validStart,
-                      endTime: Number((validStart + dur).toFixed(2)),
-                    };
-                  }),
-                };
-              }),
+              videoTracks: nextTracks,
+              selectedClip: {
+                trackType: "video",
+                trackId: targetTrackId,
+                clipId: clip.id,
+              },
             };
           }
 
+          // --- 3. AUDIO CLIPS ---
           if (trackType === "audio") {
+            const sourceTrack = state.audioTracks.find((tr) => tr.id === sourceTrackId);
+            const clip = sourceTrack?.clips.find((c) => c.id === clipId);
+            if (!sourceTrack || !clip) return state;
+
+            const duration = clip.endTime - clip.startTime;
+            const validEnd = Number((validStart + duration).toFixed(2));
+            const movedClip: AudioClip = {
+              ...clip,
+              startTime: validStart,
+              endTime: validEnd,
+            };
+
+            // Dropped to create a new audio line
+            if (targetTrackId === "new_audio_track") {
+              const newTrackId = `track_aud_${Date.now()}`;
+              const newTrack: AudioTrack = {
+                id: newTrackId,
+                nameKey: "tracks.bgm",
+                clips: [movedClip],
+              };
+
+              const nextTracks = state.audioTracks
+                .map((tr) =>
+                  tr.id === sourceTrackId
+                    ? { ...tr, clips: tr.clips.filter((c) => c.id !== clipId) }
+                    : tr
+                )
+                .filter(
+                  (tr) => tr.id === "track_aud_1" || tr.clips.length > 0
+                );
+
+              return {
+                audioTracks: [...nextTracks, newTrack],
+                selectedClip: {
+                  trackType: "audio",
+                  trackId: newTrackId,
+                  clipId: clip.id,
+                },
+              };
+            }
+
+            // Moving within same line
+            if (sourceTrackId === targetTrackId) {
+              return {
+                audioTracks: state.audioTracks.map((tr) =>
+                  tr.id === sourceTrackId
+                    ? {
+                        ...tr,
+                        clips: tr.clips
+                          .map((c) => (c.id === clipId ? movedClip : c))
+                          .sort((a, b) => a.startTime - b.startTime),
+                      }
+                    : tr
+                ),
+              };
+            }
+
+            // Moving to another existing audio line
+            const nextTracks = state.audioTracks
+              .map((tr) => {
+                if (tr.id === sourceTrackId) {
+                  return {
+                    ...tr,
+                    clips: tr.clips.filter((c) => c.id !== clipId),
+                  };
+                }
+                if (tr.id === targetTrackId) {
+                  return {
+                    ...tr,
+                    clips: [...tr.clips, movedClip].sort(
+                      (a, b) => a.startTime - b.startTime
+                    ),
+                  };
+                }
+                return tr;
+              })
+              .filter((tr) => tr.id === "track_aud_1" || tr.clips.length > 0);
+
             return {
-              audioTracks: state.audioTracks.map((tr) => {
-                if (tr.id !== trackId) return tr;
-                return {
-                  ...tr,
-                  clips: tr.clips.map((c) => {
-                    if (c.id !== clipId) return c;
-                    const dur = c.endTime - c.startTime;
-                    return {
-                      ...c,
-                      startTime: validStart,
-                      endTime: Number((validStart + dur).toFixed(2)),
-                    };
-                  }),
-                };
-              }),
+              audioTracks: nextTracks,
+              selectedClip: {
+                trackType: "audio",
+                trackId: targetTrackId,
+                clipId: clip.id,
+              },
             };
           }
 

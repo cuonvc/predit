@@ -1,20 +1,26 @@
 import React from "react";
 
 interface TrackRowProps {
+  id?: string;
+  trackType?: "video" | "audio" | "text";
   icon: string;
   title: string;
   visible?: boolean;
   onToggleVisible?: () => void;
   heightClass?: string;
+  isDropTarget?: boolean;
   children: React.ReactNode;
 }
 
 export const TrackRow: React.FC<TrackRowProps> = ({
+  id,
+  trackType,
   icon,
   title,
   visible = true,
   onToggleVisible,
   heightClass = "h-6",
+  isDropTarget = false,
   children,
 }) => {
   return (
@@ -35,7 +41,15 @@ export const TrackRow: React.FC<TrackRowProps> = ({
       </div>
 
       {/* Right Timeline Lane */}
-      <div className={`relative flex-1 ${heightClass} flex items-center`}>
+      <div
+        data-track-id={id}
+        data-track-type={trackType}
+        className={`relative flex-1 ${heightClass} flex items-center rounded transition-all ${
+          isDropTarget
+            ? "bg-[#00c8d2]/20 ring-2 ring-[#00c8d2] shadow-[0_0_12px_rgba(0,200,210,0.35)]"
+            : ""
+        }`}
+      >
         {children}
       </div>
     </div>
