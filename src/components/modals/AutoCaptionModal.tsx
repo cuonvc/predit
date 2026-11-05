@@ -14,46 +14,7 @@ import {
 } from "../../services/tauriBridge";
 import { chunkWordsIntoCaptions } from "../../services/captionChunker";
 import { translateSegmentsBilingual } from "../../services/groqTranslator";
-
-async function detectMediaDuration(
-  filePath: string,
-  isVideo: boolean
-): Promise<number> {
-  return new Promise((resolve) => {
-    try {
-      const media = document.createElement(isVideo ? "video" : "audio");
-      media.preload = "metadata";
-      let finished = false;
-      const finish = (dur: number) => {
-        if (!finished) {
-          finished = true;
-          resolve(dur > 0 && !isNaN(dur) ? Number(dur.toFixed(2)) : 30);
-        }
-      };
-      media.onloadedmetadata = () => finish(media.duration);
-      media.onerror = () => finish(30);
-      setTimeout(() => finish(30), 1200);
-
-      const isTauri =
-        typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-      if (
-        isTauri &&
-        !filePath.startsWith("blob:") &&
-        !filePath.startsWith("http")
-      ) {
-        import("@tauri-apps/api/core")
-          .then(({ convertFileSrc }) => {
-            media.src = convertFileSrc(filePath);
-          })
-          .catch(() => finish(30));
-      } else {
-        media.src = filePath;
-      }
-    } catch {
-      resolve(30);
-    }
-  });
-}
+import { detectMediaDuration } from "../../services/mediaUtils";
 
 /** Renders a media bin card with a live video or image frame thumbnail preview */
 const VideoMediaCard: React.FC<{

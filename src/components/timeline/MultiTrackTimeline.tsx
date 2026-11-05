@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { TransitionType, useTimelineStore } from "../../store/useTimelineStore";
+import { detectMediaDuration } from "../../services/mediaUtils";
 import { Playhead } from "./Playhead";
 import { TrackRow } from "./TrackRow";
 import { ClipBlock } from "./ClipBlock";
@@ -85,7 +86,10 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         if (selected) {
           const fileList = Array.isArray(selected) ? selected : [selected];
           for (const f of fileList) {
-            importMediaFile(f, "video", 5.0, true);
+            const ext = f.split(".").pop()?.toLowerCase() || "";
+            const isImage = ["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp"].includes(ext);
+            const dur = isImage ? 5.0 : await detectMediaDuration(f, true);
+            importMediaFile(f, "video", dur, true);
           }
           return;
         }
@@ -114,7 +118,8 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         if (selected) {
           const fileList = Array.isArray(selected) ? selected : [selected];
           for (const f of fileList) {
-            importMediaFile(f, "audio", 30.0, true);
+            const dur = await detectMediaDuration(f, false);
+            importMediaFile(f, "audio", dur, false);
           }
           return;
         }
@@ -125,7 +130,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     audioFileInputRef.current?.click();
   };
 
-  const handleFileInputChange = (
+  const handleFileInputChange = async (
     e: React.ChangeEvent<HTMLInputElement>,
     isAudio = false
   ) => {
@@ -134,7 +139,8 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const effectiveUri = (file as any).path || URL.createObjectURL(file);
-      importMediaFile(effectiveUri, isAudio ? "audio" : "video", isAudio ? 30.0 : 5.0, true);
+      const dur = await detectMediaDuration(effectiveUri, !isAudio);
+      importMediaFile(effectiveUri, isAudio ? "audio" : "video", dur, !isAudio);
     }
     e.target.value = "";
   };

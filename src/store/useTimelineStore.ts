@@ -55,6 +55,8 @@ export interface AudioClip {
   volume: number;
   fadeIn: number;
   fadeOut: number;
+  playbackRate?: number;
+  muted?: boolean;
 }
 
 export interface AudioTrack {
@@ -1373,12 +1375,14 @@ export const useTimelineStore = create<TimelineState>()(
           const primaryAudioTrack = state.audioTracks[0];
           const targetTrack = selectedTrack || primaryAudioTrack;
 
-          if (
+          const isTargetPlaceholder =
             targetTrack &&
             targetTrack.clips.length === 1 &&
-            (targetTrack.clips[0].id === "clip_a1" || targetTrack.clips[0].id === "clip_a_sample") &&
-            startTime === 0
-          ) {
+            (targetTrack.clips[0].id === "clip_a1" ||
+              targetTrack.clips[0].id === "clip_a_sample" ||
+              targetTrack.clips[0].sourceFile === "C:/Music/acoustic_background.mp3");
+
+          if (isTargetPlaceholder) {
             return {
               audioTracks: state.audioTracks.map((tr) =>
                 tr.id === targetTrack.id
@@ -1821,6 +1825,14 @@ export const useTimelineStore = create<TimelineState>()(
         const cleanDuration = Math.max(0.5, Number(duration.toFixed(2)));
         const ext = fileUri.split(".").pop()?.toLowerCase() || "";
         const isImage = ["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp"].includes(ext);
+        const isAudio =
+          mediaType === "audio" ||
+          ["mp3", "wav", "m4a", "aac", "ogg", "flac"].includes(ext);
+
+        if (isAudio) {
+          get().addAudioClip(fileUri, cleanDuration);
+          return;
+        }
 
         if (isOverlay || isImage) {
           get().addOverlayClip(
@@ -1828,11 +1840,6 @@ export const useTimelineStore = create<TimelineState>()(
             isImage ? "image" : "video",
             isImage ? Math.min(cleanDuration, 5.0) : cleanDuration
           );
-          return;
-        }
-
-        if (mediaType === "audio") {
-          get().addAudioClip(fileUri, cleanDuration);
           return;
         }
 

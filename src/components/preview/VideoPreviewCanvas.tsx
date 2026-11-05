@@ -2,9 +2,11 @@ import React, { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AspectRatioPreset,
+  AudioClip,
   useTimelineStore,
   VideoClip,
 } from "../../store/useTimelineStore";
+import { detectMediaDuration } from "../../services/mediaUtils";
 
 function hexToRgba(hex: string, alpha: number): string {
   const clean = (hex || "#000000").replace("#", "");
@@ -126,6 +128,156 @@ const OverlayLayerItem: React.FC<{
         </>
       )}
     </div>
+  );
+};
+
+/** Renders and plays an audio clip in sync with the timeline playhead */
+const AudioClipPlayer: React.FC<{
+  clip: AudioClip;
+  playheadTime: number;
+  isPlaying: boolean;
+}> = ({ clip, playheadTime, isPlaying }) => {
+  const [resolvedSrc, setResolvedSrc] = useState<string>("");
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const srcFile = clip.sourceFile;
+    if (
+      !srcFile ||
+      srcFile === "C:/Music/acoustic_background.mp3" ||
+      srcFile === "sample_bgm.mp3"
+    ) {
+      setResolvedSrc("");
+      return;
+    }
+    const isTauri =
+      typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (
+      isTauri &&
+      !srcFile.startsWith("blob:") &&
+      !srcFile.startsWith("http")
+    ) {
+      import("@tauri-apps/api/core")
+        .then(({ convertFileSrc }) => {
+          setResolvedSrc(convertFileSrc(srcFile));
+        })
+        .catch(() => setResolvedSrc(srcFile));
+    } else {
+      setResolvedSrc(srcFile);
+    }
+  }, [clip.sourceFile]);
+
+  const isWithinRange =
+    playheadTime >= clip.startTime && playheadTime <= clip.endTime;
+
+  // Sync volume, mute, fadeIn, fadeOut, and playbackRate
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (clip.muted) {
+      audio.muted = true;
+      return;
+    }
+    audio.muted = false;
+
+    const baseVol = Math.min(1, Math.max(0, clip.volume ?? 1.0));
+    let volMultiplier = 1.0;
+    const offset = playheadTime - clip.startTime;
+    const remaining = clip.endTime - playheadTime;
+
+    if (clip.fadeIn > 0 && offset < clip.fadeIn && offset >= 0) {
+      volMultiplier *= Math.max(0, offset / clip.fadeIn);
+    }
+    if (clip.fadeOut > 0 && remaining < clip.fadeOut && remaining >= 0) {
+      volMultiplier *= Math.max(0, remaining / clip.fadeOut);
+    }
+
+    audio.volume = Math.min(1, Math.max(0, baseVol * volMultiplier));
+    if (clip.playbackRate) {
+      audio.playbackRate = clip.playbackRate;
+    }
+  }, [
+    clip.volume,
+    clip.muted,
+    clip.fadeIn,
+    clip.fadeOut,
+    clip.playbackRate,
+    playheadTime,
+    clip.startTime,
+    clip.endTime,
+  ]);
+
+  // Sync play / pause state
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !resolvedSrc) return;
+
+    if (isPlaying && isWithinRange) {
+      const speed = clip.playbackRate || 1.0;
+      const localOffset = Math.max(0, playheadTime - clip.startTime);
+      const targetTime = Math.min(
+        clip.sourceEnd,
+        clip.sourceStart + localOffset * speed
+      );
+      if (Math.abs(audio.currentTime - targetTime) > 0.15) {
+        try {
+          audio.currentTime = targetTime;
+        } catch {
+          // ignore seek errors
+        }
+      }
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+    }
+  }, [isPlaying, isWithinRange, resolvedSrc]);
+
+  // Sync currentTime on playhead movement
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !resolvedSrc) return;
+
+    if (isWithinRange) {
+      const speed = clip.playbackRate || 1.0;
+      const localOffset = Math.max(0, playheadTime - clip.startTime);
+      const targetTime = Math.min(
+        clip.sourceEnd,
+        clip.sourceStart + localOffset * speed
+      );
+      const tolerance = isPlaying ? 0.28 : 0.04;
+      if (Math.abs(audio.currentTime - targetTime) > tolerance) {
+        try {
+          audio.currentTime = targetTime;
+        } catch {
+          // ignore
+        }
+      }
+    } else {
+      if (!audio.paused) {
+        audio.pause();
+      }
+    }
+  }, [
+    playheadTime,
+    isWithinRange,
+    clip.sourceStart,
+    clip.sourceEnd,
+    clip.startTime,
+    clip.playbackRate,
+    isPlaying,
+    resolvedSrc,
+  ]);
+
+  if (!resolvedSrc) return null;
+
+  return (
+    <audio
+      ref={audioRef}
+      src={resolvedSrc}
+      preload="auto"
+      className="hidden"
+    />
   );
 };
 
@@ -359,7 +511,9 @@ export const VideoPreviewCanvas: React.FC = () => {
       const isAudio = ["mp3", "wav", "m4a", "aac", "ogg", "flac"].includes(ext);
       if (isVideo || isAudio) {
         const effectiveUri = (file as any).path || URL.createObjectURL(file);
-        importMediaFile(effectiveUri, isVideo ? "video" : "audio", 30);
+        detectMediaDuration(effectiveUri, isVideo).then((duration) => {
+          importMediaFile(effectiveUri, isVideo ? "video" : "audio", duration);
+        });
       }
     }
   };
@@ -629,6 +783,18 @@ export const VideoPreviewCanvas: React.FC = () => {
           })}
         </div>
       </div>
+
+      {/* Background & Voiceover Audio Tracks Playback Engine */}
+      {audioTracks.flatMap((track) =>
+        track.clips.map((clip) => (
+          <AudioClipPlayer
+            key={clip.id}
+            clip={clip}
+            playheadTime={playheadTime}
+            isPlaying={isPlaying}
+          />
+        ))
+      )}
 
       {/* Bottom CapCut Player Transport Bar */}
       <div className="flex items-center justify-between pt-2 border-t border-[#2a2a2e] text-xs shrink-0">
