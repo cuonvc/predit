@@ -174,6 +174,7 @@ export const AutoCaptionModal: React.FC = () => {
   const setCaptionTrackMode = usePreditConfigStore(
     (s) => s.setCaptionTrackMode
   );
+  const setGroqApiKey = usePreditConfigStore((s) => s.setGroqApiKey);
   const setSidecarRamStatus = usePreditConfigStore(
     (s) => s.setSidecarRamStatus
   );
@@ -427,15 +428,42 @@ export const AutoCaptionModal: React.FC = () => {
   };
 
   const handleGenerateCaptions = async () => {
-    const sourceVideo =
-      videoTracks[0]?.clips[0]?.sourceFile || "C:/Videos/raw_speaking_01.mp4";
+    const primaryVideoClip = videoTracks
+      .flatMap((t) => t.clips)
+      .find(
+        (c) =>
+          c.sourceFile &&
+          c.sourceFile !== "sample_speaker_en.mp4" &&
+          c.sourceFile !== "C:/Videos/raw_speaking_01.mp4"
+      );
+    const primaryAudioClip = audioTracks
+      .flatMap((t) => t.clips)
+      .find(
+        (c) =>
+          c.sourceFile &&
+          c.sourceFile !== "C:/Music/acoustic_background.mp3" &&
+          c.sourceFile !== "sample_bgm.mp3"
+      );
+
+    const sourceClip =
+      primaryVideoClip ||
+      primaryAudioClip ||
+      videoTracks[0]?.clips[0] ||
+      audioTracks[0]?.clips[0];
+
+    if (!sourceClip?.sourceFile) {
+      setStatusMessage("No media found on timeline. Please import a video or audio file first.");
+      return;
+    }
+
+    const sourceMedia = sourceClip.sourceFile;
     setIsRunning(true);
 
     try {
-      // Step 1: Extract 16kHz audio via FFmpeg sidecar
+      // Step 1: Extract 16kHz audio via FFmpeg sidecar or Web Audio API
       setStatusMessage(t("aiCaptions.statusExtracting"));
       const audioPath = await extractAudioViaFfmpegSidecar(
-        sourceVideo,
+        sourceMedia,
         transcriptionEngine
       );
 
@@ -449,6 +477,10 @@ export const AutoCaptionModal: React.FC = () => {
               (ram) => setSidecarRamStatus(ram)
             )
           : await transcribeWithGroqCloudWhisper(audioPath, groqApiKey);
+
+      if (!words || words.length === 0) {
+        throw new Error("No speech detected in this media.");
+      }
 
       // Step 3: Smart Caption Segmentation (<=42 chars or >0.45s pause)
       const chunkedSegments = chunkWordsIntoCaptions(words);
@@ -852,26 +884,73 @@ export const AutoCaptionModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Local GGML Model Selector */}
+              {/* Groq API Key Input when Cloud engine is selected */}
+              {transcriptionEngine === "groq_cloud" && (
+                <div className="space-y-1.5 p-2.5 rounded bg-[#222226] border border-[#2a2a2e]">
+                  <div className="flex items-center justify-between">
+                    <label className="text-zinc-300 font-medium text-[11px]">
+                      Groq API Key (Free)
+                    </label>
+                    <a
+                      href="https://console.groq.com/keys"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#00c8d2] hover:underline text-[11px]"
+                    >
+                      Get free key ↗
+                    </a>
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="gsk_..."
+                    value={groqApiKey}
+                    onChange={(e) => setGroqApiKey(e.target.value)}
+                    className="w-full bg-[#27272c] border border-[#2a2a2e] rounded px-2.5 py-1.5 text-zinc-100 font-mono text-xs focus:outline-none focus:border-[#00c8d2]"
+                  />
+                  <p className="text-[10px] text-zinc-500 leading-normal">
+                    Free instant transcription with whisper-large-v3-turbo (1-2s response, no model download).
+                  </p>
+                </div>
+              )}
+
+              {/* Local GGML Model Selector & Setup Info */}
               {transcriptionEngine === "local_whisper" && (
-                <div className="space-y-1">
-                  <label className="block text-zinc-400">
-                    {t("aiCaptions.modelLabel")}
-                  </label>
-                  <select
-                    value={localWhisperModel}
-                    onChange={(e) =>
-                      setLocalWhisperModel(e.target.value as LocalWhisperModel)
-                    }
-                    className="w-full bg-[#27272c] border border-[#2a2a2e] rounded px-2.5 py-1.5 text-zinc-200"
-                  >
-                    <option value="ggml-large-v3-turbo-q5_0.bin">
-                      ggml-large-v3-turbo-q5_0.bin (1.1 GB)
-                    </option>
-                    <option value="ggml-small.bin">
-                      ggml-small.bin (480 MB)
-                    </option>
-                  </select>
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <label className="block text-zinc-400">
+                      {t("aiCaptions.modelLabel")}
+                    </label>
+                    <select
+                      value={localWhisperModel}
+                      onChange={(e) =>
+                        setLocalWhisperModel(e.target.value as LocalWhisperModel)
+                      }
+                      className="w-full bg-[#27272c] border border-[#2a2a2e] rounded px-2.5 py-1.5 text-zinc-200"
+                    >
+                      <option value="ggml-base.bin">
+                        ggml-base.bin (140 MB — Fast & balanced)
+                      </option>
+                      <option value="ggml-tiny.bin">
+                        ggml-tiny.bin (75 MB — Ultra lightweight)
+                      </option>
+                      <option value="ggml-small.bin">
+                        ggml-small.bin (480 MB)
+                      </option>
+                      <option value="ggml-large-v3-turbo-q5_0.bin">
+                        ggml-large-v3-turbo-q5_0.bin (1.1 GB — High accuracy)
+                      </option>
+                    </select>
+                  </div>
+
+                  <div className="p-2 rounded bg-[#222226] border border-[#2a2a2e] text-[10px] text-zinc-400 space-y-1">
+                    <div className="text-amber-400 font-medium">⚡ Local Setup Requirement:</div>
+                    <div className="leading-relaxed">
+                      Requires <span className="font-mono text-zinc-200">{localWhisperModel}</span> in <span className="font-mono text-zinc-200">src-tauri/resources/models/</span>.
+                    </div>
+                    <div className="text-zinc-500">
+                      To download automatically: <code className="text-[#00c8d2]">powershell scripts/setup_whisper_local.ps1</code>
+                    </div>
+                  </div>
                 </div>
               )}
 

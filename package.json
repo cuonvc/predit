@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:exe": "tauri build --no-bundle",
+    "setup:whisper": "powershell -ExecutionPolicy Bypass -File scripts/setup_whisper_local.ps1",
     "preview": "vite preview",
     "tauri": "tauri"
   },

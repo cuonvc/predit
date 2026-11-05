@@ -56,29 +56,56 @@ export async function translateSegmentsBilingual(
       src: item.src,
     }));
 
-    const response = await fetch(GROQ_CHAT_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey.trim()}`,
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: JSON.stringify({ subtitles: payloadSubtitles }),
-          },
-        ],
-      }),
-    });
+    let response: Response | null = null;
+    const candidateModels = [
+      "llama-3.1-8b-instant",
+      "llama-3.3-70b-versatile",
+      "llama3-70b-8192",
+      "llama3-8b-8192",
+    ];
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Groq Translation API Error (${response.status}): ${errText}`);
+    for (const model of candidateModels) {
+      try {
+        const res = await fetch(GROQ_CHAT_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey.trim()}`,
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0.2,
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              {
+                role: "user",
+                content: JSON.stringify({ subtitles: payloadSubtitles }),
+              },
+            ],
+          }),
+        });
+
+        if (res.ok) {
+          response = res;
+          break;
+        }
+      } catch {
+        // try next model
+      }
+    }
+
+    if (!response || !response.ok) {
+      console.warn(
+        "Groq Translation API failed or model unavailable, falling back to original captions."
+      );
+      for (const item of batch) {
+        translationMap.set(item.id, {
+          en: item.src,
+          vi: mapOfflineDemoVietnamese(item.src),
+        });
+      }
+      continue;
     }
 
     const data = await response.json();

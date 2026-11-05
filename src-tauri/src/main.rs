@@ -10,7 +10,9 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             commands::verify_sidecar_memory_purged,
-            commands::write_utf8_ass_file
+            commands::write_utf8_ass_file,
+            commands::write_binary_file,
+            commands::read_text_file_safe
         ])
         .run(tauri::generate_context!())
         .expect("error while running Predit Tauri application");
