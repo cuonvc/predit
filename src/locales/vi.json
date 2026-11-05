@@ -48,6 +48,7 @@
     "modeBilingual": "Song ngữ (2 Track: Phụ đề EN + VI)",
     "modeMonolingual": "Đơn ngữ (1 Track: EN hoặc VI)",
     "generateBtn": "Tạo phụ đề song ngữ",
+    "generateBtnMonolingual": "Tạo phụ đề (Đơn ngữ)",
     "statusExtracting": "Đang tách âm thanh 16kHz...",
     "statusTranscribing": "Đang nạp mô hình Whisper & nhận diện giọng nói...",
     "statusPurgingRam": "Đang giải phóng mô hình Whisper khỏi RAM...",

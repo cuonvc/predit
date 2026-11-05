@@ -48,6 +48,7 @@
     "modeBilingual": "Bilingual (2 Tracks: Captions EN + VI)",
     "modeMonolingual": "Monolingual (1 Track: EN or VI)",
     "generateBtn": "Generate Bilingual Captions",
+    "generateBtnMonolingual": "Generate Captions (Monolingual)",
     "statusExtracting": "Extracting 16kHz audio...",
     "statusTranscribing": "Loading Whisper model & transcribing...",
     "statusPurgingRam": "Purging Whisper model from RAM...",

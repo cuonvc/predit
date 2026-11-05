@@ -6,7 +6,11 @@ import {
   TranscriptionEngine,
   usePreditConfigStore,
 } from "../../store/usePreditConfigStore";
-import { useTimelineStore, VideoClip } from "../../store/useTimelineStore";
+import {
+  BilingualCaptionPair,
+  useTimelineStore,
+  VideoClip,
+} from "../../store/useTimelineStore";
 import {
   extractAudioViaFfmpegSidecar,
   transcribeWithGroqCloudWhisper,
@@ -485,19 +489,33 @@ export const AutoCaptionModal: React.FC = () => {
       // Step 3: Smart Caption Segmentation (<=42 chars or >0.45s pause)
       const chunkedSegments = chunkWordsIntoCaptions(words);
 
-      // Step 4: Batch Bilingual Translation via Groq Llama-3.3-70B (45 lines/batch)
-      const bilingualPairs = await translateSegmentsBilingual(
-        chunkedSegments,
-        groqApiKey,
-        (current, total) => {
-          setStatusMessage(
-            t("aiCaptions.statusTranslating", { current, total })
-          );
-        }
-      );
+      let captionPairs: BilingualCaptionPair[];
 
-      // Step 5: Dual-Track Injection into Timeline State
-      injectBilingualTextTracks(bilingualPairs, captionTrackMode);
+      // Step 4: Translation (ONLY invoked when Bilingual mode is selected)
+      if (captionTrackMode === "bilingual") {
+        setStatusMessage(t("aiCaptions.statusTranslating", { current: 1, total: 1 }));
+        captionPairs = await translateSegmentsBilingual(
+          chunkedSegments,
+          groqApiKey,
+          (current, total) => {
+            setStatusMessage(
+              t("aiCaptions.statusTranslating", { current, total })
+            );
+          }
+        );
+      } else {
+        // Monolingual: Skip translation API completely; use transcribed speech directly
+        captionPairs = chunkedSegments.map((seg) => ({
+          id: seg.id,
+          startTime: seg.startTime,
+          endTime: seg.endTime,
+          en: seg.src,
+          vi: seg.src,
+        }));
+      }
+
+      // Step 5: Dual-Track or Single-Track Injection into Timeline State
+      injectBilingualTextTracks(captionPairs, captionTrackMode);
       setStatusMessage(t("aiCaptions.statusDone"));
     } catch (err: any) {
       setStatusMessage(err?.message || "Caption pipeline error");
@@ -986,7 +1004,11 @@ export const AutoCaptionModal: React.FC = () => {
                 onClick={handleGenerateCaptions}
                 className="w-full py-2 rounded bg-[#00c8d2] text-[#091214] font-semibold text-xs hover:opacity-90 disabled:opacity-50 transition"
               >
-                {isRunning ? "..." : t("aiCaptions.generateBtn")}
+                {isRunning
+                  ? "..."
+                  : captionTrackMode === "bilingual"
+                  ? t("aiCaptions.generateBtn")
+                  : t("aiCaptions.generateBtnMonolingual")}
               </button>
             </div>
           </div>
