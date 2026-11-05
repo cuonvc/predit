@@ -1,0 +1,91 @@
+{
+  "app": {
+    "name": "Predit",
+    "tagline": "Trình dựng video phụ đề song ngữ AI",
+    "saved": "Đã lưu"
+  },
+  "header": {
+    "importMedia": "Nhập dữ liệu",
+    "exportVideo": "Xuất video",
+    "aspectRatio": "Tỷ lệ khung hình",
+    "language": "Ngôn ngữ",
+    "settings": "Cài đặt"
+  },
+  "toolbar": {
+    "split": "Tách đoạn (S)",
+    "deleteLeft": "Cắt bên trái (Q)",
+    "deleteRight": "Cắt bên phải (W)",
+    "addText": "Thêm văn bản",
+    "deleteClip": "Xóa (Del)",
+    "undo": "Hoàn tác",
+    "redo": "Làm lại",
+    "syncBilingual": "Đồng bộ thời gian Anh/Việt"
+  },
+  "mediaBin": {
+    "title": "Dữ liệu & Phụ đề AI",
+    "cardDesc": "Tự động nhận diện giọng nói & dịch sang 2 track phụ đề Anh + Việt đồng bộ.",
+    "sidecarRam": "RAM Sidecar",
+    "purged": "0 MB (Đã giải phóng)",
+    "gpuReady": "Sẵn sàng NVENC"
+  },
+  "aiCaptions": {
+    "title": "Phụ đề song ngữ Predit AI",
+    "engineLabel": "Bộ máy nhận diện giọng nói",
+    "engineLocal": "Whisper nội bộ (Offline - Miễn phí)",
+    "engineCloud": "Groq Cloud Whisper (Siêu nhanh)",
+    "localDesc": "Khởi chạy tiến trình phụ whisper-cli & giải phóng 100% RAM/VRAM ngay khi xong.",
+    "cloudDesc": "Nén MP3 mono 64kbps (~4.5MB/10p) → gọi whisper-large-v3-turbo.",
+    "modelLabel": "Mô hình GGML nội bộ",
+    "trackModeLabel": "Chế độ tạo Track phụ đề",
+    "modeBilingual": "Song ngữ (2 Track: Phụ đề EN + VI)",
+    "modeMonolingual": "Đơn ngữ (1 Track: EN hoặc VI)",
+    "generateBtn": "Tạo phụ đề song ngữ",
+    "statusExtracting": "Đang tách âm thanh 16kHz...",
+    "statusTranscribing": "Đang nạp mô hình Whisper & nhận diện giọng nói...",
+    "statusPurgingRam": "Đang giải phóng mô hình Whisper khỏi RAM...",
+    "statusTranslating": "Đang dịch Anh ↔ Việt qua Groq ({{current}}/{{total}})...",
+    "statusDone": "Đã chèn 2 track phụ đề song ngữ!"
+  },
+  "inspector": {
+    "title": "Thuộc tính — Kiểu chữ & Track",
+    "noSelection": "Chọn một clip video, âm thanh hoặc văn bản trên timeline để chỉnh sửa.",
+    "textContent": "Nội dung văn bản",
+    "fontFamily": "Phông chữ",
+    "fontSize": "Cỡ chữ",
+    "textColor": "Màu chữ",
+    "borderStroke": "Viền chữ",
+    "backgroundBox": "Nền hộp chữ",
+    "applyToAllTrack": "Áp dụng kiểu dáng cho toàn bộ track này",
+    "applyToAllDesc": "Cập nhật TextTrack.stylePreset cho toàn bộ các clip trong track này",
+    "playbackSpeed": "Tốc độ phát",
+    "audioVolume": "Âm lượng",
+    "canvasPos": "Vị trí khung hình (X / Y)",
+    "fadeInOut": "Hiệu ứng rõ dần / mờ dần (s)",
+    "detachAudio": "Tách âm thanh sang Track riêng",
+    "muteClip": "Tắt tiếng Clip này"
+  },
+  "tracks": {
+    "mainVideo": "V1 • Video chính",
+    "bgm": "A1 • Nhạc nền",
+    "captionsEn": "Phụ đề - EN",
+    "captionsVi": "Phụ đề - VI",
+    "manualText": "Tiêu đề & Nhãn dán"
+  },
+  "export": {
+    "title": "Xuất Video — Bộ máy FFmpeg gốc",
+    "subtitle": "Kết xuất phụ đề UTF-8 .ass một lượt + Mã hóa phần cứng GPU",
+    "resolution": "Độ phân giải & Tỷ lệ",
+    "encoder": "Bộ mã hóa GPU",
+    "assCompiler": "Bộ biên dịch phụ đề",
+    "startExport": "Bắt đầu xuất FFmpeg",
+    "rendering": "Đang kết xuất predit_output_final.mp4...",
+    "completed": "Xuất video hoàn tất!"
+  },
+  "settings": {
+    "title": "Tùy chỉnh & Cấu hình BYOK",
+    "subtitle": "Lưu trữ trong usePreditConfigStore.ts (tách biệt khỏi lịch sử Hoàn tác)",
+    "groqKey": "Groq Cloud API Key (BYOK — Miễn phí Llama-3.3-70B & Whisper Turbo)",
+    "hwAccel": "Tăng tốc phần cứng GPU",
+    "saveBtn": "Lưu cài đặt"
+  }
+}

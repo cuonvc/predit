@@ -1,0 +1,91 @@
+{
+  "app": {
+    "name": "Predit",
+    "tagline": "Bilingual AI Video Editor",
+    "saved": "Saved"
+  },
+  "header": {
+    "importMedia": "Import Media",
+    "exportVideo": "Export Video",
+    "aspectRatio": "Aspect Ratio",
+    "language": "Language",
+    "settings": "Settings"
+  },
+  "toolbar": {
+    "split": "Split (S)",
+    "deleteLeft": "Trim Left (Q)",
+    "deleteRight": "Trim Right (W)",
+    "addText": "Add Text",
+    "deleteClip": "Delete (Del)",
+    "undo": "Undo",
+    "redo": "Redo",
+    "syncBilingual": "Sync EN/VI Timing"
+  },
+  "mediaBin": {
+    "title": "Media & AI Captions",
+    "cardDesc": "Auto-transcribe speech & translate into synced English + Vietnamese timeline tracks.",
+    "sidecarRam": "Sidecar RAM",
+    "purged": "0 MB (Purged)",
+    "gpuReady": "NVENC Ready"
+  },
+  "aiCaptions": {
+    "title": "Predit AI Bilingual Captions",
+    "engineLabel": "Transcription Engine",
+    "engineLocal": "Local Whisper (Offline - Free)",
+    "engineCloud": "Groq Cloud Whisper (Fast)",
+    "localDesc": "Spawns ephemeral whisper-cli sidecar & purges 100% RAM/VRAM on exit.",
+    "cloudDesc": "Compresses 64kbps mono MP3 (~4.5MB/10m) → whisper-large-v3-turbo.",
+    "modelLabel": "Local GGML Model Weight",
+    "trackModeLabel": "Caption Track Output Mode",
+    "modeBilingual": "Bilingual (2 Tracks: Captions EN + VI)",
+    "modeMonolingual": "Monolingual (1 Track: EN or VI)",
+    "generateBtn": "Generate Bilingual Captions",
+    "statusExtracting": "Extracting 16kHz audio...",
+    "statusTranscribing": "Loading Whisper model & transcribing...",
+    "statusPurgingRam": "Purging Whisper model from RAM...",
+    "statusTranslating": "Translating EN ↔ VI via Groq ({{current}}/{{total}})...",
+    "statusDone": "Injected bilingual caption tracks!"
+  },
+  "inspector": {
+    "title": "Inspector — Text & Track Style",
+    "noSelection": "Select any video, audio, or text clip on the timeline or canvas to inspect.",
+    "textContent": "Text Content",
+    "fontFamily": "Font Family",
+    "fontSize": "Size",
+    "textColor": "Color",
+    "borderStroke": "Border Stroke",
+    "backgroundBox": "Background Box",
+    "applyToAllTrack": "Apply style to all clips in this track",
+    "applyToAllDesc": "Updates parent TextTrack.stylePreset across all clips in this track",
+    "playbackSpeed": "Playback Speed",
+    "audioVolume": "Audio Volume",
+    "canvasPos": "Canvas Position (X / Y)",
+    "fadeInOut": "Fade In / Out (s)",
+    "detachAudio": "Detach Audio to Track",
+    "muteClip": "Mute Clip Audio"
+  },
+  "tracks": {
+    "mainVideo": "V1 • Main Video",
+    "bgm": "A1 • BGM Audio",
+    "captionsEn": "Captions - EN",
+    "captionsVi": "Captions - VI",
+    "manualText": "Titles & Overlays"
+  },
+  "export": {
+    "title": "Export Video — Native FFmpeg Engine",
+    "subtitle": "Single-pass UTF-8 .ass burn-in + Hardware GPU Encoder",
+    "resolution": "Resolution & Aspect",
+    "encoder": "Hardware Encoder",
+    "assCompiler": "Subtitle Compiler",
+    "startExport": "Start FFmpeg Render",
+    "rendering": "Rendering predit_output_final.mp4...",
+    "completed": "Export Completed Successfully!"
+  },
+  "settings": {
+    "title": "Preferences & BYOK Configuration",
+    "subtitle": "Persisted in usePreditConfigStore.ts (excluded from Undo/Redo stack)",
+    "groqKey": "Groq Cloud API Key (BYOK — Free Tier Llama-3.3-70B & Whisper Turbo)",
+    "hwAccel": "Hardware Acceleration",
+    "saveBtn": "Save Preferences"
+  }
+}
