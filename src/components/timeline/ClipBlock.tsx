@@ -21,6 +21,7 @@ interface ClipBlockProps {
   hasNextClip?: boolean;
   onSelect: () => void;
   onCycleTransition?: () => void;
+  onMoveClip?: (newStartTime: number) => void;
 }
 
 const VARIANT_CLASSES: Record<ClipBlockProps["variant"], string> = {
@@ -52,27 +53,76 @@ export const ClipBlock: React.FC<ClipBlockProps> = ({
   hasNextClip = false,
   onSelect,
   onCycleTransition,
+  onMoveClip,
 }) => {
+  const [dragOffsetPx, setDragOffsetPx] = React.useState<number | null>(null);
+  const dragStartRef = React.useRef<{
+    startX: number;
+    initialStart: number;
+    moved: boolean;
+  } | null>(null);
+
   const leftPx = startTime * pixelsPerSecond;
+  const effectiveLeftPx =
+    dragOffsetPx !== null ? Math.max(0, leftPx + dragOffsetPx) : leftPx;
   const widthPx = Math.max(24, (endTime - startTime) * pixelsPerSecond);
   const hasActiveTransition = transitionType && transitionType !== "none";
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    onSelect();
+
+    if (!onMoveClip) return;
+    dragStartRef.current = {
+      startX: e.clientX,
+      initialStart: startTime,
+      moved: false,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!dragStartRef.current) return;
+      const dx = moveEvent.clientX - dragStartRef.current.startX;
+      if (Math.abs(dx) > 3) {
+        dragStartRef.current.moved = true;
+        setDragOffsetPx(dx);
+      }
+    };
+
+    const handleMouseUp = (upEvent: MouseEvent) => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      if (dragStartRef.current && dragStartRef.current.moved) {
+        const dx = upEvent.clientX - dragStartRef.current.startX;
+        const newStart = Math.max(
+          0,
+          Number((dragStartRef.current.initialStart + dx / pixelsPerSecond).toFixed(2))
+        );
+        onMoveClip(newStart);
+      }
+      dragStartRef.current = null;
+      setDragOffsetPx(null);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
   return (
     <div
-      onMouseDown={(e) => {
-        e.stopPropagation();
-        onSelect();
-      }}
+      onMouseDown={handleMouseDown}
       onClick={(e) => {
         e.stopPropagation();
         onSelect();
       }}
       style={{
-        left: `${leftPx}px`,
+        left: `${effectiveLeftPx}px`,
         width: `${widthPx}px`,
       }}
-      className={`absolute rounded-sm border px-2 flex items-center justify-between text-xs cursor-pointer select-none transition ${
+      className={`absolute rounded-sm border px-2 flex items-center justify-between text-xs select-none transition ${
         VARIANT_CLASSES[variant]
+      } ${
+        dragOffsetPx !== null ? "cursor-ew-resize opacity-80 z-30" : "cursor-pointer"
       } ${
         isSelected
           ? "ring-2 ring-[#00c8d2] border-[#00c8d2] z-20 brightness-110"

@@ -46,10 +46,90 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   const trimRightAtPlayhead = useTimelineStore((s) => s.trimRightAtPlayhead);
   const deleteSelectedClip = useTimelineStore((s) => s.deleteSelectedClip);
   const addManualTextClip = useTimelineStore((s) => s.addManualTextClip);
+  const moveClip = useTimelineStore((s) => s.moveClip);
+  const importMediaFile = useTimelineStore((s) => s.importMediaFile);
   const toggleTextTrackVisibility = useTimelineStore(
     (s) => s.toggleTextTrackVisibility
   );
   const updateClipTransition = useTimelineStore((s) => s.updateClipTransition);
+
+  const overlayFileInputRef = useRef<HTMLInputElement>(null);
+  const audioFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePickOverlay = async () => {
+    const isTauri =
+      typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (isTauri) {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const selected = await open({
+          multiple: true,
+          filters: [
+            {
+              name: "Media Overlays",
+              extensions: [
+                "mp4", "mov", "mkv", "webm", "avi", "wmv", "flv", "m4v",
+                "png", "jpg", "jpeg", "webp", "gif", "svg", "bmp",
+              ],
+            },
+          ],
+        });
+        if (selected) {
+          const fileList = Array.isArray(selected) ? selected : [selected];
+          for (const f of fileList) {
+            importMediaFile(f, "video", 5.0, true);
+          }
+          return;
+        }
+      } catch {
+        // fallback
+      }
+    }
+    overlayFileInputRef.current?.click();
+  };
+
+  const handlePickAudio = async () => {
+    const isTauri =
+      typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (isTauri) {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const selected = await open({
+          multiple: true,
+          filters: [
+            {
+              name: "Audio Files",
+              extensions: ["mp3", "wav", "m4a", "aac", "ogg", "flac"],
+            },
+          ],
+        });
+        if (selected) {
+          const fileList = Array.isArray(selected) ? selected : [selected];
+          for (const f of fileList) {
+            importMediaFile(f, "audio", 30.0, true);
+          }
+          return;
+        }
+      } catch {
+        // fallback
+      }
+    }
+    audioFileInputRef.current?.click();
+  };
+
+  const handleFileInputChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    isAudio = false
+  ) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const effectiveUri = (file as any).path || URL.createObjectURL(file);
+      importMediaFile(effectiveUri, isAudio ? "audio" : "video", isAudio ? 30.0 : 5.0, true);
+    }
+    e.target.value = "";
+  };
 
   // Dynamic total timeline duration based on actual clips
   const maxVideoEnd = Math.max(
@@ -272,10 +352,43 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           <button
             onClick={() => addManualTextClip()}
             className="hover:text-white flex items-center gap-1"
+            title={t("toolbar.addText")}
           >
             <span>T</span>
             <span>{t("toolbar.addText")}</span>
           </button>
+          <button
+            onClick={handlePickOverlay}
+            className="hover:text-white flex items-center gap-1"
+            title={t("toolbar.addOverlay")}
+          >
+            <span>🖼</span>
+            <span>{t("toolbar.addOverlay")}</span>
+          </button>
+          <button
+            onClick={handlePickAudio}
+            className="hover:text-white flex items-center gap-1"
+            title={t("toolbar.addAudio")}
+          >
+            <span>🎵</span>
+            <span>{t("toolbar.addAudio")}</span>
+          </button>
+          <input
+            ref={overlayFileInputRef}
+            type="file"
+            accept="video/*,image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => handleFileInputChange(e, false)}
+          />
+          <input
+            ref={audioFileInputRef}
+            type="file"
+            accept="audio/*"
+            multiple
+            className="hidden"
+            onChange={(e) => handleFileInputChange(e, true)}
+          />
           <button
             onClick={deleteSelectedClip}
             className="hover:text-white px-1"
@@ -383,11 +496,15 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 
         {/* Manual Titles Track */}
         <div style={{ minWidth: `${152 + timelineTrackWidthPx}px` }} className="space-y-1.5 pt-1">
-          {manualTracks.map((track) => (
+          {manualTracks.map((track, idx) => (
             <TrackRow
               key={track.id}
               icon="T"
-              title={t("tracks.manualText")}
+              title={
+                manualTracks.length > 1
+                  ? `${t("tracks.manualText")} ${idx + 1}`
+                  : t("tracks.manualText")
+              }
               visible={track.visible}
               onToggleVisible={() => toggleTextTrackVisibility(track.id)}
             >
@@ -407,6 +524,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                       trackId: track.id,
                       clipId: clip.id,
                     })
+                  }
+                  onMoveClip={(newStart) =>
+                    moveClip("text", track.id, clip.id, newStart)
                   }
                 />
               ))}
@@ -440,6 +560,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                       clipId: clip.id,
                     })
                   }
+                  onMoveClip={(newStart) =>
+                    moveClip("text", track.id, clip.id, newStart)
+                  }
                 />
               ))}
             </TrackRow>
@@ -472,17 +595,24 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                       clipId: clip.id,
                     })
                   }
+                  onMoveClip={(newStart) =>
+                    moveClip("text", track.id, clip.id, newStart)
+                  }
                 />
               ))}
             </TrackRow>
           ))}
 
           {/* Video & Image Overlays (PIP Layer Track) */}
-          {overlayVideoTracks.map((track) => (
+          {overlayVideoTracks.map((track, idx) => (
             <TrackRow
               key={track.id}
               icon="🖼"
-              title={t("tracks.overlayTrack")}
+              title={
+                overlayVideoTracks.length > 1
+                  ? `${t("tracks.overlayTrack")} ${idx + 1}`
+                  : t("tracks.overlayTrack")
+              }
               heightClass="h-8"
             >
               {track.clips.map((clip) => {
@@ -506,6 +636,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                         trackId: track.id,
                         clipId: clip.id,
                       })
+                    }
+                    onMoveClip={(newStart) =>
+                      moveClip("video", track.id, clip.id, newStart)
                     }
                   />
                 );
@@ -565,11 +698,15 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           ))}
 
           {/* Audio Track */}
-          {audioTracks.map((track) => (
+          {audioTracks.map((track, idx) => (
             <TrackRow
               key={track.id}
               icon="🎵"
-              title={t("tracks.bgm")}
+              title={
+                audioTracks.length > 1
+                  ? `${t("tracks.bgm")} ${idx + 1}`
+                  : t("tracks.bgm")
+              }
               heightClass="h-8"
             >
               {track.clips.map((clip) => {
@@ -592,6 +729,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                         trackId: track.id,
                         clipId: clip.id,
                       })
+                    }
+                    onMoveClip={(newStart) =>
+                      moveClip("audio", track.id, clip.id, newStart)
                     }
                   />
                 );

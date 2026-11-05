@@ -16,6 +16,8 @@
     "deleteLeft": "Cắt bên trái (Q)",
     "deleteRight": "Cắt bên phải (W)",
     "addText": "Thêm văn bản",
+    "addOverlay": "+ Lớp phủ",
+    "addAudio": "+ Âm thanh",
     "deleteClip": "Xóa (Del)",
     "undo": "Hoàn tác",
     "redo": "Làm lại",

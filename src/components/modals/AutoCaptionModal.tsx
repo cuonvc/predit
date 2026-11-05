@@ -513,7 +513,7 @@ export const AutoCaptionModal: React.FC = () => {
     }
   };
 
-  const manualTextTrack = textTracks.find((tr) => tr.role === "manual_text");
+  const manualTextTracks = textTracks.filter((tr) => tr.role === "manual_text");
 
   return (
     <aside
@@ -707,44 +707,47 @@ export const AutoCaptionModal: React.FC = () => {
                     />
                   ))
                 )}
-              {audioTracks[0]?.clips.map((a) => {
-                const displayName =
-                  a.sourceFile.replace(/\\/g, "/").split("/").pop() ||
-                  a.sourceFile;
-                const isSelected = selectedClip?.clipId === a.id;
-                return (
-                  <div
-                    key={a.id}
-                    onClick={() =>
-                      setSelectedClip({
-                        trackType: "audio",
-                        trackId: audioTracks[0].id,
-                        clipId: a.id,
-                      })
-                    }
-                    className={`bg-[#222226] rounded border p-1.5 cursor-pointer transition ${
-                      isSelected
-                        ? "border-[#00c8d2] ring-1 ring-[#00c8d2]"
-                        : "border-[#2a2a2e] hover:border-zinc-600"
-                    }`}
-                  >
-                    <div className="h-20 rounded bg-zinc-900 relative flex items-center justify-center">
-                      <span className="text-xs text-sky-400/80 font-mono">
-                        ▂▄▆█▄▂▃
-                      </span>
-                      <span className="absolute bottom-1 right-1 px-1 rounded bg-black/80 text-[10px] font-mono text-zinc-300">
-                        {(a.sourceEnd - a.sourceStart).toFixed(1)}s
-                      </span>
-                    </div>
+              {audioTracks.flatMap((tr) =>
+                tr.clips.map((a) => {
+                  const displayName =
+                    a.sourceFile.replace(/\\/g, "/").split("/").pop() ||
+                    a.sourceFile;
+                  const isSelected = selectedClip?.clipId === a.id;
+                  return (
                     <div
-                      className="mt-1.5 text-xs truncate text-zinc-300"
-                      title={displayName}
+                      key={a.id}
+                      onClick={() => {
+                        setSelectedClip({
+                          trackType: "audio",
+                          trackId: tr.id,
+                          clipId: a.id,
+                        });
+                        setPlayheadTime(a.startTime);
+                      }}
+                      className={`bg-[#222226] rounded border p-1.5 cursor-pointer transition ${
+                        isSelected
+                          ? "border-[#00c8d2] ring-1 ring-[#00c8d2]"
+                          : "border-[#2a2a2e] hover:border-zinc-600"
+                      }`}
                     >
-                      {displayName}
+                      <div className="h-20 rounded bg-zinc-900 relative flex items-center justify-center">
+                        <span className="text-xs text-sky-400/80 font-mono">
+                          ▂▄▆█▄▂▃
+                        </span>
+                        <span className="absolute bottom-1 right-1 px-1 rounded bg-black/80 text-[10px] font-mono text-zinc-300">
+                          {(a.sourceEnd - a.sourceStart).toFixed(1)}s
+                        </span>
+                      </div>
+                      <div
+                        className="mt-1.5 text-xs truncate text-zinc-300"
+                        title={displayName}
+                      >
+                        {displayName}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         )}
@@ -765,35 +768,37 @@ export const AutoCaptionModal: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              {manualTextTrack?.clips.map((clip) => {
-                const isSelected = selectedClip?.clipId === clip.id;
-                return (
-                  <div
-                    key={clip.id}
-                    onClick={() => {
-                      setSelectedClip({
-                        trackType: "text",
-                        trackId: manualTextTrack.id,
-                        clipId: clip.id,
-                      });
-                      setPlayheadTime(clip.startTime);
-                    }}
-                    className={`p-2.5 rounded border cursor-pointer transition flex items-center justify-between ${
-                      isSelected
-                        ? "bg-[#27272c] border-[#00c8d2] text-zinc-100"
-                        : "bg-[#222226] border-[#2a2a2e] text-zinc-300 hover:border-zinc-600"
-                    }`}
-                  >
-                    <div className="truncate pr-2">
-                      <div className="font-medium truncate">{clip.text}</div>
-                      <div className="text-[10px] text-zinc-500 font-mono mt-0.5">
-                        {clip.startTime.toFixed(1)}s – {clip.endTime.toFixed(1)}s
+              {manualTextTracks.flatMap((tr) =>
+                tr.clips.map((clip) => {
+                  const isSelected = selectedClip?.clipId === clip.id;
+                  return (
+                    <div
+                      key={clip.id}
+                      onClick={() => {
+                        setSelectedClip({
+                          trackType: "text",
+                          trackId: tr.id,
+                          clipId: clip.id,
+                        });
+                        setPlayheadTime(clip.startTime);
+                      }}
+                      className={`p-2.5 rounded border cursor-pointer transition flex items-center justify-between ${
+                        isSelected
+                          ? "bg-[#27272c] border-[#00c8d2] text-zinc-100"
+                          : "bg-[#222226] border-[#2a2a2e] text-zinc-300 hover:border-zinc-600"
+                      }`}
+                    >
+                      <div className="truncate pr-2">
+                        <div className="font-medium truncate">{clip.text}</div>
+                        <div className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                          {clip.startTime.toFixed(1)}s – {clip.endTime.toFixed(1)}s
+                        </div>
                       </div>
+                      <span className="text-[#00d2dc] text-xs font-bold">T</span>
                     </div>
-                    <span className="text-[#00d2dc] text-xs font-bold">T</span>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         )}

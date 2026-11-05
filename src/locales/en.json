@@ -16,6 +16,8 @@
     "deleteLeft": "Trim Left (Q)",
     "deleteRight": "Trim Right (W)",
     "addText": "Add Text",
+    "addOverlay": "+ Overlay",
+    "addAudio": "+ Audio",
     "deleteClip": "Delete (Del)",
     "undo": "Undo",
     "redo": "Redo",

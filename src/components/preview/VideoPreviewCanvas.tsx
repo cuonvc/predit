@@ -168,7 +168,6 @@ export const VideoPreviewCanvas: React.FC = () => {
   );
 
   const mainVideoTrack = videoTracks.find((tr) => !tr.isOverlay) || videoTracks[0];
-  const overlayVideoTrack = videoTracks.find((tr) => tr.isOverlay);
 
   const allVideoClips = mainVideoTrack?.clips || [];
   const activeVideoClip =
@@ -178,9 +177,13 @@ export const VideoPreviewCanvas: React.FC = () => {
     allVideoClips[allVideoClips.length - 1] ||
     allVideoClips[0];
 
-  const activeOverlayMediaClips = (overlayVideoTrack?.clips || []).filter(
-    (c) => playheadTime >= c.startTime && playheadTime <= c.endTime
-  );
+  const activeOverlayMediaItems = videoTracks
+    .filter((tr) => tr.isOverlay)
+    .flatMap((track) =>
+      track.clips
+        .filter((c) => playheadTime >= c.startTime && playheadTime <= c.endTime)
+        .map((clip) => ({ trackId: track.id, clip }))
+    );
 
   const [resolvedVideoSrc, setResolvedVideoSrc] = useState<string>("");
   const [isPlayerDragOver, setIsPlayerDragOver] = useState(false);
@@ -493,37 +496,36 @@ export const VideoPreviewCanvas: React.FC = () => {
             />
           )}
 
-          {/* Active Image & PIP Video Overlays (Draggable on Canvas) */}
-          {overlayVideoTrack &&
-            activeOverlayMediaClips.map((clip) => {
-              const isSelected =
-                selectedClip?.trackId === overlayVideoTrack.id &&
-                selectedClip?.clipId === clip.id;
-              return (
-                <OverlayLayerItem
-                  key={clip.id}
-                  clip={clip}
-                  trackId={overlayVideoTrack.id}
-                  playheadTime={playheadTime}
-                  isPlaying={isPlaying}
-                  isSelected={isSelected}
-                  onStartDrag={(e) => {
-                    if (e.button !== 0) return;
-                    e.stopPropagation();
-                    setSelectedClip({
-                      trackType: "video",
-                      trackId: overlayVideoTrack.id,
-                      clipId: clip.id,
-                    });
-                    setDraggingItem({
-                      kind: "overlay",
-                      trackId: overlayVideoTrack.id,
-                      clipId: clip.id,
-                    });
-                  }}
-                />
-              );
-            })}
+          {/* Active Image & PIP Video Overlays across all Overlay tracks (Draggable on Canvas) */}
+          {activeOverlayMediaItems.map(({ trackId, clip }) => {
+            const isSelected =
+              selectedClip?.trackId === trackId &&
+              selectedClip?.clipId === clip.id;
+            return (
+              <OverlayLayerItem
+                key={clip.id}
+                clip={clip}
+                trackId={trackId}
+                playheadTime={playheadTime}
+                isPlaying={isPlaying}
+                isSelected={isSelected}
+                onStartDrag={(e) => {
+                  if (e.button !== 0) return;
+                  e.stopPropagation();
+                  setSelectedClip({
+                    trackType: "video",
+                    trackId: trackId,
+                    clipId: clip.id,
+                  });
+                  setDraggingItem({
+                    kind: "overlay",
+                    trackId: trackId,
+                    clipId: clip.id,
+                  });
+                }}
+              />
+            );
+          })}
 
           {/* Active Text & Bilingual Caption Bounding Boxes (Draggable on Canvas) */}
           {activeOverlays.map(({ track, clip, effectiveStyle }) => {
