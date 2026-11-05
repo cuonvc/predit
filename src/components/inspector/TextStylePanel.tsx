@@ -430,7 +430,10 @@ export const TextStylePanel: React.FC = () => {
       </div>
 
       {/* Bottom "Apply to all in track" toggle */}
-      <TrackPresetToggle />
+      <TrackPresetToggle
+        trackId={selectedTextTrack?.id}
+        clipId={selectedTextClip?.id}
+      />
     </aside>
   );
 };

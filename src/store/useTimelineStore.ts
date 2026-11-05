@@ -137,7 +137,7 @@ export interface TimelineState {
   togglePlay: () => void;
   setSelectedClip: (clip: SelectedClip | null) => void;
   setAspectRatio: (aspect: AspectRatioPreset) => void;
-  setApplyStyleToAllTrack: (apply: boolean) => void;
+  setApplyStyleToAllTrack: (apply: boolean, trackId?: string, clipId?: string) => void;
   toggleSyncLinkedTextClips: () => void;
   splitSelectedClipAtPlayhead: () => void;
   trimLeftAtPlayhead: () => void;
@@ -535,7 +535,8 @@ export const useTimelineStore = create<TimelineState>()(
           return { isPlaying: false };
         }),
 
-      setSelectedClip: (selectedClip) => set({ selectedClip }),
+      setSelectedClip: (selectedClip) =>
+        set({ selectedClip, applyStyleToAllTrack: false }),
 
       setAspectRatio: (aspectRatio) =>
         set((state) => ({
@@ -546,8 +547,67 @@ export const useTimelineStore = create<TimelineState>()(
           },
         })),
 
-      setApplyStyleToAllTrack: (applyStyleToAllTrack) =>
-        set({ applyStyleToAllTrack }),
+      setApplyStyleToAllTrack: (applyStyleToAllTrack, trackIdParam, clipIdParam) =>
+        set((state) => {
+          if (!applyStyleToAllTrack) {
+            return { applyStyleToAllTrack: false };
+          }
+
+          const trackId =
+            trackIdParam ||
+            (state.selectedClip?.trackType === "text"
+              ? state.selectedClip.trackId
+              : state.textTracks[0]?.id);
+
+          const clipId =
+            clipIdParam ||
+            (state.selectedClip?.trackType === "text"
+              ? state.selectedClip.clipId
+              : undefined);
+
+          if (!trackId) {
+            return { applyStyleToAllTrack: true };
+          }
+
+          const targetTrack = state.textTracks.find((tr) => tr.id === trackId);
+          if (!targetTrack) {
+            return { applyStyleToAllTrack: true };
+          }
+
+          const targetClip = clipId
+            ? targetTrack.clips.find((c) => c.id === clipId)
+            : targetTrack.clips[0];
+
+          // Compute effective style of the target clip to propagate across the track
+          const effectiveStyle: TextStylePreset = {
+            ...targetTrack.stylePreset,
+            ...(targetClip?.overrideStyle || {}),
+            backgroundBox: {
+              ...targetTrack.stylePreset.backgroundBox,
+              ...(targetClip?.overrideStyle?.backgroundBox || {}),
+            },
+            position: {
+              ...targetTrack.stylePreset.position,
+              ...(targetClip?.overrideStyle?.position || {}),
+            },
+          };
+
+          return {
+            applyStyleToAllTrack: true,
+            textTracks: state.textTracks.map((tr) =>
+              tr.id === trackId
+                ? {
+                    ...tr,
+                    stylePreset: effectiveStyle,
+                    clips: tr.clips.map((c) => ({
+                      ...c,
+                      overrideStyle: null,
+                    })),
+                  }
+                : tr
+            ),
+          };
+        }),
 
       toggleSyncLinkedTextClips: () =>
         set((state) => ({
@@ -976,6 +1036,7 @@ export const useTimelineStore = create<TimelineState>()(
 
             return {
               textTracks: nextTextTracks,
+              applyStyleToAllTrack: false,
               selectedClip: {
                 trackType: "text",
                 trackId: newTrackId,
@@ -985,6 +1046,7 @@ export const useTimelineStore = create<TimelineState>()(
           }
 
           return {
+            applyStyleToAllTrack: false,
             textTracks: state.textTracks.map((tr) =>
               tr.id === targetTrack.id
                 ? {
@@ -1175,26 +1237,30 @@ export const useTimelineStore = create<TimelineState>()(
         set((state) => {
           if (state.applyStyleToAllTrack) {
             return {
-              textTracks: state.textTracks.map((tr) =>
-                tr.id === trackId
-                  ? {
-                      ...tr,
-                      stylePreset: {
-                        ...tr.stylePreset,
-                        ...styleUpdates,
-                        backgroundBox: {
-                          ...tr.stylePreset.backgroundBox,
-                          ...(styleUpdates.backgroundBox || {}),
-                        },
-                        position: {
-                          ...tr.stylePreset.position,
-                          ...(styleUpdates.position || {}),
-                        },
-                      },
-                      clips: tr.clips.map((c) => ({ ...c, overrideStyle: null })),
-                    }
-                  : tr
-              ),
+              textTracks: state.textTracks.map((tr) => {
+                if (tr.id !== trackId) return tr;
+                const currentClip = tr.clips.find((c) => c.id === clipId);
+                const nextStylePreset: TextStylePreset = {
+                  ...tr.stylePreset,
+                  ...(currentClip?.overrideStyle || {}),
+                  ...styleUpdates,
+                  backgroundBox: {
+                    ...tr.stylePreset.backgroundBox,
+                    ...(currentClip?.overrideStyle?.backgroundBox || {}),
+                    ...(styleUpdates.backgroundBox || {}),
+                  },
+                  position: {
+                    ...tr.stylePreset.position,
+                    ...(currentClip?.overrideStyle?.position || {}),
+                    ...(styleUpdates.position || {}),
+                  },
+                };
+                return {
+                  ...tr,
+                  stylePreset: nextStylePreset,
+                  clips: tr.clips.map((c) => ({ ...c, overrideStyle: null })),
+                };
+              }),
             };
           }
 
