@@ -19,14 +19,20 @@
     "deleteClip": "Xóa (Del)",
     "undo": "Hoàn tác",
     "redo": "Làm lại",
-    "syncBilingual": "Đồng bộ thời gian Anh/Việt"
+    "syncBilingual": "Đồng bộ thời gian Anh/Việt",
+    "autoFit": "Tự động khớp",
+    "zoomHint": "Ctrl + Cuộn chuột để thu phóng"
   },
   "mediaBin": {
     "title": "Dữ liệu & Phụ đề AI",
     "cardDesc": "Tự động nhận diện giọng nói & dịch sang 2 track phụ đề Anh + Việt đồng bộ.",
     "sidecarRam": "RAM Sidecar",
     "purged": "0 MB (Đã giải phóng)",
-    "gpuReady": "Sẵn sàng NVENC"
+    "gpuReady": "Sẵn sàng NVENC",
+    "dropzone": "Kéo & thả video hoặc tệp âm thanh vào đây",
+    "dropzoneHint": "Hỗ trợ MP4, MOV, MKV, WebM, MP3, WAV (hoặc nhấn để duyệt tệp)",
+    "browse": "Duyệt tệp",
+    "noClips": "Chưa có dữ liệu nào được nhập"
   },
   "aiCaptions": {
     "title": "Phụ đề song ngữ Predit AI",
@@ -55,6 +61,12 @@
     "textColor": "Màu chữ",
     "borderStroke": "Viền chữ",
     "backgroundBox": "Nền hộp chữ",
+    "bgColor": "Màu nền",
+    "bgOpacity": "Độ mờ nền",
+    "borderColor": "Màu viền khung",
+    "borderWidth": "Độ dày viền khung",
+    "borderRadius": "Bo góc khung",
+    "overlayScale": "Kích thước lớp phủ",
     "applyToAllTrack": "Áp dụng kiểu dáng cho toàn bộ track này",
     "applyToAllDesc": "Cập nhật TextTrack.stylePreset cho toàn bộ các clip trong track này",
     "playbackSpeed": "Tốc độ phát",
@@ -62,10 +74,19 @@
     "canvasPos": "Vị trí khung hình (X / Y)",
     "fadeInOut": "Hiệu ứng rõ dần / mờ dần (s)",
     "detachAudio": "Tách âm thanh sang Track riêng",
-    "muteClip": "Tắt tiếng Clip này"
+    "muteClip": "Tắt tiếng Clip này",
+    "transition": "Hiệu ứng chuyển cảnh",
+    "transitionType": "Kiểu chuyển cảnh",
+    "transitionDuration": "Thời lượng",
+    "transNone": "Không có",
+    "transFade": "Mờ dần (Crossfade)",
+    "transDipBlack": "Chuyển đen (Dip to Black)",
+    "transWipeLeft": "Quét trái (Wipe Left)",
+    "transSlide": "Trượt (Slide)"
   },
   "tracks": {
     "mainVideo": "V1 • Video chính",
+    "overlayTrack": "V2 • Lớp phủ (Ảnh / Video)",
     "bgm": "A1 • Nhạc nền",
     "captionsEn": "Phụ đề - EN",
     "captionsVi": "Phụ đề - VI",

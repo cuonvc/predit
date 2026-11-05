@@ -12,6 +12,7 @@ out/
 
 # Tauri & Rust build artifacts
 src-tauri/target/
+src-tauri/gen/
 **/target/
 Cargo.lock.bak
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   TextStylePreset,
@@ -18,15 +18,25 @@ export const TextStylePanel: React.FC = () => {
   );
   const updateTextStyle = useTimelineStore((s) => s.updateTextStyle);
 
+  useEffect(() => {
+    if (!selectedClip) return;
+    if (selectedClip.trackType === "video" || selectedClip.trackType === "audio") {
+      setActiveTab("audio");
+    } else if (selectedClip.trackType === "text") {
+      setActiveTab("text");
+    }
+  }, [selectedClip]);
+
+  // Only resolve text clip when explicitly selected — clicking outside hides properties
   const selectedTextTrack =
     selectedClip?.trackType === "text"
       ? textTracks.find((tr) => tr.id === selectedClip.trackId)
-      : textTracks[0];
+      : undefined;
 
   const selectedTextClip =
     selectedClip?.trackType === "text"
       ? selectedTextTrack?.clips.find((c) => c.id === selectedClip.clipId)
-      : selectedTextTrack?.clips[0];
+      : undefined;
 
   const effectiveStyle: TextStylePreset | undefined = selectedTextTrack
     ? {
@@ -44,7 +54,7 @@ export const TextStylePanel: React.FC = () => {
     : undefined;
 
   return (
-    <aside className="col-span-3 bg-[#18181b] rounded border border-[#2a2a2e] flex flex-col justify-between p-3 text-xs select-none">
+    <aside className="h-full w-full bg-[#18181b] rounded border border-[#2a2a2e] flex flex-col justify-between p-3 text-xs select-none overflow-y-auto">
       <div className="space-y-3">
         {/* Top Inspector Tabs (Text | Audio & Speed) */}
         <div className="flex items-center gap-4 border-b border-[#2a2a2e] pb-2 font-medium">
@@ -122,36 +132,53 @@ export const TextStylePanel: React.FC = () => {
                 </select>
               </div>
 
+              {/* Font Size Slider + Number Input */}
               <div className="flex items-center justify-between">
                 <span className="text-zinc-400">{t("inspector.fontSize")}</span>
-                <div className="flex items-center gap-2 w-40">
+                <div className="flex items-center gap-1.5 w-44">
                   <input
                     type="range"
-                    min="18"
-                    max="96"
+                    min="12"
+                    max="120"
                     value={effectiveStyle.fontSize}
                     onChange={(e) =>
                       updateTextStyle(
                         selectedTextTrack.id,
                         selectedTextClip.id,
                         {
-                          fontSize: parseInt(e.target.value, 10),
+                          fontSize: parseInt(e.target.value, 10) || 24,
                         }
                       )
                     }
                     className="w-full accent-[#00c8d2]"
                   />
-                  <span className="w-8 text-right font-mono text-zinc-300">
-                    {effectiveStyle.fontSize}
-                  </span>
+                  <input
+                    type="number"
+                    min={12}
+                    max={120}
+                    value={effectiveStyle.fontSize}
+                    onChange={(e) => {
+                      const val = Math.max(
+                        12,
+                        Math.min(120, parseInt(e.target.value, 10) || 24)
+                      );
+                      updateTextStyle(
+                        selectedTextTrack.id,
+                        selectedTextClip.id,
+                        { fontSize: val }
+                      );
+                    }}
+                    className="w-12 bg-[#27272c] border border-[#2a2a2e] rounded px-1 py-0.5 text-right font-mono text-zinc-200"
+                  />
                 </div>
               </div>
 
+              {/* Text Color */}
               <div className="flex items-center justify-between">
                 <span className="text-zinc-400">
                   {t("inspector.textColor")}
                 </span>
-                <div className="flex items-center gap-2 w-40">
+                <div className="flex items-center gap-2 w-44">
                   <input
                     type="color"
                     value={effectiveStyle.color}
@@ -164,7 +191,7 @@ export const TextStylePanel: React.FC = () => {
                         }
                       )
                     }
-                    className="w-5 h-5 rounded-sm bg-transparent cursor-pointer"
+                    className="w-6 h-6 rounded bg-transparent cursor-pointer border border-zinc-700"
                   />
                   <span className="font-mono text-zinc-300">
                     {effectiveStyle.color}
@@ -172,64 +199,228 @@ export const TextStylePanel: React.FC = () => {
                 </div>
               </div>
 
+              {/* Text Outline / Stroke */}
               <div className="flex items-center justify-between">
                 <span className="text-zinc-400">
-                  {t("inspector.backgroundBox")}
+                  {t("inspector.borderStroke")}
                 </span>
-                <div className="flex items-center gap-2 w-40">
+                <div className="flex items-center gap-2 w-44">
                   <input
-                    type="checkbox"
-                    checked={effectiveStyle.backgroundBox.enabled}
+                    type="color"
+                    value={effectiveStyle.strokeColor || "#000000"}
                     onChange={(e) =>
                       updateTextStyle(
                         selectedTextTrack.id,
                         selectedTextClip.id,
                         {
-                          backgroundBox: {
-                            ...effectiveStyle.backgroundBox,
-                            enabled: e.target.checked,
-                          },
+                          strokeColor: e.target.value,
                         }
                       )
                     }
-                    className="accent-[#00c8d2]"
+                    className="w-6 h-6 rounded bg-transparent cursor-pointer border border-zinc-700 shrink-0"
                   />
-                  <span className="text-zinc-300">
-                    {Math.round(effectiveStyle.backgroundBox.opacity * 100)}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Position Y Slider */}
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-400">
-                  {t("inspector.canvasPos")}
-                </span>
-                <div className="flex items-center gap-1.5 w-40 font-mono">
                   <input
                     type="range"
-                    min="0.05"
-                    max="0.95"
-                    step="0.02"
-                    value={effectiveStyle.position.y}
+                    min="0"
+                    max="8"
+                    step="1"
+                    value={effectiveStyle.strokeWidth ?? 0}
                     onChange={(e) =>
                       updateTextStyle(
                         selectedTextTrack.id,
                         selectedTextClip.id,
                         {
-                          position: {
-                            ...effectiveStyle.position,
-                            y: parseFloat(e.target.value),
-                          },
+                          strokeWidth: parseInt(e.target.value, 10),
                         }
                       )
                     }
                     className="w-full accent-[#00c8d2]"
                   />
-                  <span className="w-12 text-right text-zinc-300">
-                    Y:{effectiveStyle.position.y.toFixed(2)}
+                  <span className="w-6 text-right font-mono text-zinc-300">
+                    {effectiveStyle.strokeWidth ?? 0}
                   </span>
                 </div>
+              </div>
+
+              {/* Background Box & Border Section */}
+              <div className="pt-2 border-t border-[#2a2a2e] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-300 font-medium">
+                    {t("inspector.backgroundBox")}
+                  </span>
+                  <div className="flex items-center gap-2 w-44">
+                    <input
+                      type="checkbox"
+                      checked={effectiveStyle.backgroundBox.enabled}
+                      onChange={(e) =>
+                        updateTextStyle(
+                          selectedTextTrack.id,
+                          selectedTextClip.id,
+                          {
+                            backgroundBox: {
+                              ...effectiveStyle.backgroundBox,
+                              enabled: e.target.checked,
+                            },
+                          }
+                        )
+                      }
+                      className="accent-[#00c8d2]"
+                    />
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={effectiveStyle.backgroundBox.opacity}
+                      onChange={(e) =>
+                        updateTextStyle(
+                          selectedTextTrack.id,
+                          selectedTextClip.id,
+                          {
+                            backgroundBox: {
+                              ...effectiveStyle.backgroundBox,
+                              enabled: true,
+                              opacity: parseFloat(e.target.value),
+                            },
+                          }
+                        )
+                      }
+                      className="w-full accent-[#00c8d2]"
+                    />
+                    <span className="w-9 text-right font-mono text-zinc-300">
+                      {Math.round(effectiveStyle.backgroundBox.opacity * 100)}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* Background Color */}
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-400">
+                    {t("inspector.bgColor")}
+                  </span>
+                  <div className="flex items-center gap-2 w-44">
+                    <input
+                      type="color"
+                      value={effectiveStyle.backgroundBox.color || "#000000"}
+                      onChange={(e) =>
+                        updateTextStyle(
+                          selectedTextTrack.id,
+                          selectedTextClip.id,
+                          {
+                            backgroundBox: {
+                              ...effectiveStyle.backgroundBox,
+                              enabled: true,
+                              color: e.target.value,
+                            },
+                          }
+                        )
+                      }
+                      className="w-6 h-6 rounded bg-transparent cursor-pointer border border-zinc-700"
+                    />
+                    <span className="font-mono text-zinc-300">
+                      {effectiveStyle.backgroundBox.color || "#000000"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Background Border Color & Width */}
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-400">
+                    {t("inspector.borderWidth")}
+                  </span>
+                  <div className="flex items-center gap-2 w-44">
+                    <input
+                      type="color"
+                      value={
+                        effectiveStyle.backgroundBox.borderColor || "#00c8d2"
+                      }
+                      onChange={(e) =>
+                        updateTextStyle(
+                          selectedTextTrack.id,
+                          selectedTextClip.id,
+                          {
+                            backgroundBox: {
+                              ...effectiveStyle.backgroundBox,
+                              enabled: true,
+                              borderColor: e.target.value,
+                              borderWidth: Math.max(
+                                1,
+                                effectiveStyle.backgroundBox.borderWidth || 2
+                              ),
+                            },
+                          }
+                        )
+                      }
+                      className="w-6 h-6 rounded bg-transparent cursor-pointer border border-zinc-700 shrink-0"
+                      title={t("inspector.borderColor")}
+                    />
+                    <input
+                      type="range"
+                      min="0"
+                      max="10"
+                      step="1"
+                      value={effectiveStyle.backgroundBox.borderWidth ?? 0}
+                      onChange={(e) =>
+                        updateTextStyle(
+                          selectedTextTrack.id,
+                          selectedTextClip.id,
+                          {
+                            backgroundBox: {
+                              ...effectiveStyle.backgroundBox,
+                              enabled: true,
+                              borderWidth: parseInt(e.target.value, 10),
+                            },
+                          }
+                        )
+                      }
+                      className="w-full accent-[#00c8d2]"
+                    />
+                    <span className="w-6 text-right font-mono text-zinc-300">
+                      {effectiveStyle.backgroundBox.borderWidth ?? 0}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Background Corner Radius */}
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-400">
+                    {t("inspector.borderRadius")}
+                  </span>
+                  <div className="flex items-center gap-2 w-44">
+                    <input
+                      type="range"
+                      min="0"
+                      max="24"
+                      step="1"
+                      value={effectiveStyle.backgroundBox.borderRadius ?? 8}
+                      onChange={(e) =>
+                        updateTextStyle(
+                          selectedTextTrack.id,
+                          selectedTextClip.id,
+                          {
+                            backgroundBox: {
+                              ...effectiveStyle.backgroundBox,
+                              borderRadius: parseInt(e.target.value, 10),
+                            },
+                          }
+                        )
+                      }
+                      className="w-full accent-[#00c8d2]"
+                    />
+                    <span className="w-6 text-right font-mono text-zinc-300">
+                      {effectiveStyle.backgroundBox.borderRadius ?? 8}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Position X / Y Readout (Draggable directly on video preview) */}
+              <div className="pt-2 border-t border-[#2a2a2e] flex items-center justify-between text-[11px] text-zinc-500">
+                <span>{t("inspector.canvasPos")}</span>
+                <span className="font-mono text-zinc-300">
+                  X:{effectiveStyle.position.x.toFixed(2)} • Y:
+                  {effectiveStyle.position.y.toFixed(2)}
+                </span>
               </div>
             </div>
           </>

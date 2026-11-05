@@ -17,6 +17,8 @@ export interface ProjectMeta {
   fillMode: "pad" | "blur";
 }
 
+export type TransitionType = "none" | "fade" | "dip_black" | "wipe_left" | "slide";
+
 export interface VideoClip {
   id: string;
   sourceFile: string;
@@ -27,8 +29,11 @@ export interface VideoClip {
   playbackRate: number;
   volume: number;
   muted: boolean;
+  mediaKind?: "video" | "image";
+  position?: { x: number; y: number };
+  scale?: number;
   transitionOut?: {
-    type: "none" | "fade" | "dip_black" | "wipe_left" | "slide";
+    type: TransitionType;
     duration: number;
   };
 }
@@ -37,6 +42,7 @@ export interface VideoTrack {
   id: string;
   nameKey: string;
   clips: VideoClip[];
+  isOverlay?: boolean;
 }
 
 export interface AudioClip {
@@ -63,6 +69,8 @@ export interface TextBackgroundBox {
   opacity: number;
   padding: number;
   borderRadius: number;
+  borderColor?: string;
+  borderWidth?: number;
 }
 
 export interface TextStylePreset {
@@ -136,6 +144,11 @@ export interface TimelineState {
   toggleTextTrackVisibility: (trackId: string) => void;
   updateClipVolume: (volume: number) => void;
   updateClipPlaybackRate: (rate: number) => void;
+  updateClipTransition: (
+    clipId: string,
+    transitionType: TransitionType,
+    duration?: number
+  ) => void;
   detachVideoAudio: (clipId?: string) => void;
   updateTextClipContent: (trackId: string, clipId: string, text: string) => void;
   updateTextStyle: (
@@ -150,7 +163,18 @@ export interface TimelineState {
   importMediaFile: (
     fileUri: string,
     mediaType: "video" | "audio",
+    duration?: number,
+    isOverlay?: boolean
+  ) => void;
+  addOverlayClip: (
+    fileUri: string,
+    mediaKind: "video" | "image",
     duration?: number
+  ) => void;
+  updateOverlayPosition: (
+    clipId: string,
+    position: { x: number; y: number },
+    scale?: number
   ) => void;
 }
 
@@ -176,6 +200,8 @@ const DEFAULT_MANUAL_STYLE: TextStylePreset = {
     opacity: 0.65,
     padding: 10,
     borderRadius: 8,
+    borderColor: "#00c8d2",
+    borderWidth: 0,
   },
   position: { x: 0.5, y: 0.14 },
 };
@@ -192,6 +218,8 @@ const DEFAULT_EN_CAPTION_STYLE: TextStylePreset = {
     opacity: 0.65,
     padding: 10,
     borderRadius: 8,
+    borderColor: "#FFFFFF",
+    borderWidth: 0,
   },
   position: { x: 0.5, y: 0.78 },
 };
@@ -208,6 +236,8 @@ const DEFAULT_VI_CAPTION_STYLE: TextStylePreset = {
     opacity: 0.65,
     padding: 10,
     borderRadius: 8,
+    borderColor: "#FFD700",
+    borderWidth: 0,
   },
   position: { x: 0.5, y: 0.86 },
 };
@@ -227,8 +257,15 @@ const initialVideoTracks: VideoTrack[] = [
         playbackRate: 1.0,
         volume: 1.0,
         muted: false,
+        mediaKind: "video",
       },
     ],
+  },
+  {
+    id: "track_vid_overlay",
+    nameKey: "tracks.overlayTrack",
+    isOverlay: true,
+    clips: [],
   },
 ];
 
@@ -325,6 +362,89 @@ const initialTextTracks: TextTrack[] = [
   },
 ];
 
+function packVideoClips(clips: VideoClip[]): VideoClip[] {
+  let cursor = 0;
+  return clips.map((c) => {
+    const rate = c.playbackRate || 1.0;
+    const dur = Math.max(0.1, Number(((c.sourceEnd - c.sourceStart) / rate).toFixed(2)));
+    const startTime = cursor;
+    const endTime = Number((cursor + dur).toFixed(2));
+    cursor = endTime;
+    return { ...c, startTime, endTime };
+  });
+}
+
+function packAudioClips(clips: AudioClip[]): AudioClip[] {
+  let cursor = 0;
+  return clips.map((c) => {
+    const dur = Math.max(0.1, Number((c.sourceEnd - c.sourceStart).toFixed(2)));
+    const startTime = cursor;
+    const endTime = Number((cursor + dur).toFixed(2));
+    cursor = endTime;
+    return { ...c, startTime, endTime };
+  });
+}
+
+function getVideoTotalDuration(videoTracks: VideoTrack[]): number {
+  return Math.max(
+    0,
+    ...videoTracks.flatMap((tr) => tr.clips.map((c) => c.endTime))
+  );
+}
+
+function fitAudioTracksToDuration(
+  audioTracks: AudioTrack[],
+  totalVideoDuration: number,
+  leftTrimDelta = 0,
+  leftTrimAt = 0
+): AudioTrack[] {
+  if (totalVideoDuration <= 0) return audioTracks;
+  return audioTracks.map((tr) => {
+    const adjusted = tr.clips
+      .map((c) => {
+        if (leftTrimDelta > 0 && leftTrimAt >= c.startTime && leftTrimAt < c.endTime) {
+          return {
+            ...c,
+            sourceStart: Number((c.sourceStart + leftTrimDelta).toFixed(2)),
+          };
+        }
+        return c;
+      })
+      .filter((c) => c.sourceEnd - c.sourceStart > 0.05);
+
+    const packed = packAudioClips(adjusted);
+    const clamped = packed
+      .filter((c) => c.startTime < totalVideoDuration)
+      .map((c) => {
+        if (c.endTime > totalVideoDuration) {
+          const newDur = Math.max(0.1, Number((totalVideoDuration - c.startTime).toFixed(2)));
+          return {
+            ...c,
+            endTime: totalVideoDuration,
+            sourceEnd: Number((c.sourceStart + newDur).toFixed(2)),
+          };
+        }
+        return c;
+      });
+    return { ...tr, clips: packAudioClips(clamped) };
+  });
+}
+
+function resolveTargetClipAtPlayhead(state: TimelineState): SelectedClip | null {
+  const { selectedClip, playheadTime, videoTracks } = state;
+  const roundTime = Number(playheadTime.toFixed(2));
+  if (selectedClip) {
+    return selectedClip;
+  }
+  for (const tr of videoTracks) {
+    const found = tr.clips.find((c) => roundTime > c.startTime && roundTime < c.endTime);
+    if (found) {
+      return { trackType: "video", trackId: tr.id, clipId: found.id };
+    }
+  }
+  return null;
+}
+
 export const useTimelineStore = create<TimelineState>()(
   temporal(
     (set, get) => ({
@@ -375,81 +495,92 @@ export const useTimelineStore = create<TimelineState>()(
 
       splitSelectedClipAtPlayhead: () =>
         set((state) => {
-          const { selectedClip, playheadTime, project } = state;
-          if (!selectedClip) return state;
-
+          const target = resolveTargetClipAtPlayhead(state);
+          if (!target) return state;
+          const { playheadTime, project } = state;
           const roundTime = Number(playheadTime.toFixed(2));
 
-          if (selectedClip.trackType === "video") {
+          if (target.trackType === "video") {
+            let newSelected: SelectedClip | null = state.selectedClip;
             const nextTracks = state.videoTracks.map((tr) => {
-              if (tr.id !== selectedClip.trackId) return tr;
+              if (tr.id !== target.trackId) return tr;
               const nextClips: VideoClip[] = [];
               tr.clips.forEach((c) => {
-                if (c.id === selectedClip.clipId && roundTime > c.startTime && roundTime < c.endTime) {
-                  const cutOffset = roundTime - c.startTime;
+                if (c.id === target.clipId && roundTime > c.startTime && roundTime < c.endTime) {
+                  const rate = c.playbackRate || 1.0;
+                  const sourceOffset = (roundTime - c.startTime) * rate;
+                  const splitSourcePoint = Number((c.sourceStart + sourceOffset).toFixed(2));
                   const firstPart: VideoClip = {
                     ...c,
                     endTime: roundTime,
-                    sourceEnd: Number((c.sourceStart + cutOffset).toFixed(2)),
+                    sourceEnd: splitSourcePoint,
                   };
+                  const secondId = `${c.id}_split_${Date.now()}`;
                   const secondPart: VideoClip = {
                     ...c,
-                    id: `${c.id}_split_${Date.now()}`,
+                    id: secondId,
                     startTime: roundTime,
-                    sourceStart: Number((c.sourceStart + cutOffset).toFixed(2)),
+                    sourceStart: splitSourcePoint,
                   };
+                  newSelected = { trackType: "video", trackId: tr.id, clipId: secondId };
                   nextClips.push(firstPart, secondPart);
                 } else {
                   nextClips.push(c);
                 }
               });
-              return { ...tr, clips: nextClips };
+              return {
+                ...tr,
+                clips: tr.isOverlay ? nextClips : packVideoClips(nextClips),
+              };
             });
-            return { videoTracks: nextTracks };
+            return { videoTracks: nextTracks, selectedClip: newSelected };
           }
 
-          if (selectedClip.trackType === "audio") {
+          if (target.trackType === "audio") {
+            let newSelected: SelectedClip | null = state.selectedClip;
             const nextTracks = state.audioTracks.map((tr) => {
-              if (tr.id !== selectedClip.trackId) return tr;
+              if (tr.id !== target.trackId) return tr;
               const nextClips: AudioClip[] = [];
               tr.clips.forEach((c) => {
-                if (c.id === selectedClip.clipId && roundTime > c.startTime && roundTime < c.endTime) {
+                if (c.id === target.clipId && roundTime > c.startTime && roundTime < c.endTime) {
                   const cutOffset = roundTime - c.startTime;
                   const firstPart: AudioClip = {
                     ...c,
                     endTime: roundTime,
                     sourceEnd: Number((c.sourceStart + cutOffset).toFixed(2)),
                   };
+                  const secondId = `${c.id}_split_${Date.now()}`;
                   const secondPart: AudioClip = {
                     ...c,
-                    id: `${c.id}_split_${Date.now()}`,
+                    id: secondId,
                     startTime: roundTime,
                     sourceStart: Number((c.sourceStart + cutOffset).toFixed(2)),
                   };
+                  newSelected = { trackType: "audio", trackId: tr.id, clipId: secondId };
                   nextClips.push(firstPart, secondPart);
                 } else {
                   nextClips.push(c);
                 }
               });
-              return { ...tr, clips: nextClips };
+              return { ...tr, clips: packAudioClips(nextClips) };
             });
-            return { audioTracks: nextTracks };
+            return { audioTracks: nextTracks, selectedClip: newSelected };
           }
 
-          if (selectedClip.trackType === "text") {
-            const targetTrack = state.textTracks.find((tr) => tr.id === selectedClip.trackId);
-            const targetClip = targetTrack?.clips.find((c) => c.id === selectedClip.clipId);
+          if (target.trackType === "text") {
+            const targetTrack = state.textTracks.find((tr) => tr.id === target.trackId);
+            const targetClip = targetTrack?.clips.find((c) => c.id === target.clipId);
             if (!targetClip) return state;
 
             const linkedGroupId = project.syncLinkedTextClips ? targetClip.linkedGroupId : null;
 
             const nextTracks = state.textTracks.map((tr) => {
-              const shouldCheck = tr.id === selectedClip.trackId || (linkedGroupId && tr.clips.some((c) => c.linkedGroupId === linkedGroupId));
+              const shouldCheck = tr.id === target.trackId || (linkedGroupId && tr.clips.some((c) => c.linkedGroupId === linkedGroupId));
               if (!shouldCheck) return tr;
 
               const nextClips: TextClip[] = [];
               tr.clips.forEach((c) => {
-                const isTarget = c.id === selectedClip.clipId || (linkedGroupId && c.linkedGroupId === linkedGroupId);
+                const isTarget = c.id === target.clipId || (linkedGroupId && c.linkedGroupId === linkedGroupId);
                 if (isTarget && roundTime > c.startTime && roundTime < c.endTime) {
                   const newGroupId = linkedGroupId ? `pair_${Date.now()}` : null;
                   const firstPart: TextClip = {
@@ -477,53 +608,89 @@ export const useTimelineStore = create<TimelineState>()(
 
       trimLeftAtPlayhead: () =>
         set((state) => {
-          const { selectedClip, playheadTime, project } = state;
-          if (!selectedClip) return state;
+          const target = resolveTargetClipAtPlayhead(state);
+          if (!target) return state;
+          const { playheadTime, project } = state;
           const roundTime = Number(playheadTime.toFixed(2));
 
-          if (selectedClip.trackType === "video") {
+          if (target.trackType === "video") {
+            let trimmedDelta = 0;
+            let trimmedNewStart = roundTime;
             const nextTracks = state.videoTracks.map((tr) => {
-              if (tr.id !== selectedClip.trackId) return tr;
+              if (tr.id !== target.trackId) return tr;
+              const updated = tr.clips.map((c) => {
+                if (c.id === target.clipId && roundTime > c.startTime && roundTime < c.endTime) {
+                  const rate = c.playbackRate || 1.0;
+                  trimmedDelta = roundTime - c.startTime;
+                  trimmedNewStart = c.startTime;
+                  const sourceDelta = trimmedDelta * rate;
+                  if (tr.isOverlay) {
+                    return {
+                      ...c,
+                      startTime: roundTime,
+                      sourceStart: Number((c.sourceStart + sourceDelta).toFixed(2)),
+                    };
+                  }
+                  return {
+                    ...c,
+                    sourceStart: Number((c.sourceStart + sourceDelta).toFixed(2)),
+                  };
+                }
+                return c;
+              });
               return {
                 ...tr,
-                clips: tr.clips.map((c) => {
-                  if (c.id === selectedClip.clipId && roundTime > c.startTime && roundTime < c.endTime) {
-                    const delta = roundTime - c.startTime;
-                    return { ...c, startTime: roundTime, sourceStart: Number((c.sourceStart + delta).toFixed(2)) };
-                  }
-                  return c;
-                }),
+                clips: tr.isOverlay ? updated : packVideoClips(updated),
               };
             });
-            return { videoTracks: nextTracks };
+            const newTotal = getVideoTotalDuration(nextTracks);
+            const nextAudio = fitAudioTracksToDuration(
+              state.audioTracks,
+              newTotal,
+              trimmedDelta,
+              roundTime
+            );
+            return {
+              videoTracks: nextTracks,
+              audioTracks: nextAudio,
+              playheadTime: Number(trimmedNewStart.toFixed(2)),
+              selectedClip: target,
+            };
           }
 
-          if (selectedClip.trackType === "audio") {
+          if (target.trackType === "audio") {
+            let trimmedNewStart = roundTime;
             const nextTracks = state.audioTracks.map((tr) => {
-              if (tr.id !== selectedClip.trackId) return tr;
-              return {
-                ...tr,
-                clips: tr.clips.map((c) => {
-                  if (c.id === selectedClip.clipId && roundTime > c.startTime && roundTime < c.endTime) {
-                    const delta = roundTime - c.startTime;
-                    return { ...c, startTime: roundTime, sourceStart: Number((c.sourceStart + delta).toFixed(2)) };
-                  }
-                  return c;
-                }),
-              };
+              if (tr.id !== target.trackId) return tr;
+              const updated = tr.clips.map((c) => {
+                if (c.id === target.clipId && roundTime > c.startTime && roundTime < c.endTime) {
+                  const delta = roundTime - c.startTime;
+                  trimmedNewStart = c.startTime;
+                  return {
+                    ...c,
+                    sourceStart: Number((c.sourceStart + delta).toFixed(2)),
+                  };
+                }
+                return c;
+              });
+              return { ...tr, clips: packAudioClips(updated) };
             });
-            return { audioTracks: nextTracks };
+            return {
+              audioTracks: nextTracks,
+              playheadTime: Number(trimmedNewStart.toFixed(2)),
+              selectedClip: target,
+            };
           }
 
-          if (selectedClip.trackType === "text") {
-            const targetTrack = state.textTracks.find((tr) => tr.id === selectedClip.trackId);
-            const targetClip = targetTrack?.clips.find((c) => c.id === selectedClip.clipId);
+          if (target.trackType === "text") {
+            const targetTrack = state.textTracks.find((tr) => tr.id === target.trackId);
+            const targetClip = targetTrack?.clips.find((c) => c.id === target.clipId);
             const linkedGroupId = project.syncLinkedTextClips ? targetClip?.linkedGroupId : null;
 
             const nextTracks = state.textTracks.map((tr) => ({
               ...tr,
               clips: tr.clips.map((c) => {
-                const match = c.id === selectedClip.clipId || (linkedGroupId && c.linkedGroupId === linkedGroupId);
+                const match = c.id === target.clipId || (linkedGroupId && c.linkedGroupId === linkedGroupId);
                 if (match && roundTime > c.startTime && roundTime < c.endTime) {
                   return { ...c, startTime: roundTime };
                 }
@@ -538,53 +705,74 @@ export const useTimelineStore = create<TimelineState>()(
 
       trimRightAtPlayhead: () =>
         set((state) => {
-          const { selectedClip, playheadTime, project } = state;
-          if (!selectedClip) return state;
+          const target = resolveTargetClipAtPlayhead(state);
+          if (!target) return state;
+          const { playheadTime, project } = state;
           const roundTime = Number(playheadTime.toFixed(2));
 
-          if (selectedClip.trackType === "video") {
+          if (target.trackType === "video") {
             const nextTracks = state.videoTracks.map((tr) => {
-              if (tr.id !== selectedClip.trackId) return tr;
+              if (tr.id !== target.trackId) return tr;
+              const updated = tr.clips.map((c) => {
+                if (c.id === target.clipId && roundTime > c.startTime && roundTime < c.endTime) {
+                  const rate = c.playbackRate || 1.0;
+                  const sourceOffset = (roundTime - c.startTime) * rate;
+                  if (tr.isOverlay) {
+                    return {
+                      ...c,
+                      endTime: roundTime,
+                      sourceEnd: Number((c.sourceStart + sourceOffset).toFixed(2)),
+                    };
+                  }
+                  return {
+                    ...c,
+                    sourceEnd: Number((c.sourceStart + sourceOffset).toFixed(2)),
+                  };
+                }
+                return c;
+              });
               return {
                 ...tr,
-                clips: tr.clips.map((c) => {
-                  if (c.id === selectedClip.clipId && roundTime > c.startTime && roundTime < c.endTime) {
-                    const cutOffset = roundTime - c.startTime;
-                    return { ...c, endTime: roundTime, sourceEnd: Number((c.sourceStart + cutOffset).toFixed(2)) };
-                  }
-                  return c;
-                }),
+                clips: tr.isOverlay ? updated : packVideoClips(updated),
               };
             });
-            return { videoTracks: nextTracks };
+            const newTotal = getVideoTotalDuration(nextTracks);
+            const nextAudio = fitAudioTracksToDuration(state.audioTracks, newTotal);
+            return {
+              videoTracks: nextTracks,
+              audioTracks: nextAudio,
+              playheadTime: Math.min(roundTime, newTotal),
+              selectedClip: target,
+            };
           }
 
-          if (selectedClip.trackType === "audio") {
+          if (target.trackType === "audio") {
             const nextTracks = state.audioTracks.map((tr) => {
-              if (tr.id !== selectedClip.trackId) return tr;
-              return {
-                ...tr,
-                clips: tr.clips.map((c) => {
-                  if (c.id === selectedClip.clipId && roundTime > c.startTime && roundTime < c.endTime) {
-                    const cutOffset = roundTime - c.startTime;
-                    return { ...c, endTime: roundTime, sourceEnd: Number((c.sourceStart + cutOffset).toFixed(2)) };
-                  }
-                  return c;
-                }),
-              };
+              if (tr.id !== target.trackId) return tr;
+              const updated = tr.clips.map((c) => {
+                if (c.id === target.clipId && roundTime > c.startTime && roundTime < c.endTime) {
+                  const cutOffset = roundTime - c.startTime;
+                  return {
+                    ...c,
+                    sourceEnd: Number((c.sourceStart + cutOffset).toFixed(2)),
+                  };
+                }
+                return c;
+              });
+              return { ...tr, clips: packAudioClips(updated) };
             });
-            return { audioTracks: nextTracks };
+            return { audioTracks: nextTracks, selectedClip: target };
           }
 
-          if (selectedClip.trackType === "text") {
-            const targetTrack = state.textTracks.find((tr) => tr.id === selectedClip.trackId);
-            const targetClip = targetTrack?.clips.find((c) => c.id === selectedClip.clipId);
+          if (target.trackType === "text") {
+            const targetTrack = state.textTracks.find((tr) => tr.id === target.trackId);
+            const targetClip = targetTrack?.clips.find((c) => c.id === target.clipId);
             const linkedGroupId = project.syncLinkedTextClips ? targetClip?.linkedGroupId : null;
 
             const nextTracks = state.textTracks.map((tr) => ({
               ...tr,
               clips: tr.clips.map((c) => {
-                const match = c.id === selectedClip.clipId || (linkedGroupId && c.linkedGroupId === linkedGroupId);
+                const match = c.id === target.clipId || (linkedGroupId && c.linkedGroupId === linkedGroupId);
                 if (match && roundTime > c.startTime && roundTime < c.endTime) {
                   return { ...c, endTime: roundTime };
                 }
@@ -603,12 +791,20 @@ export const useTimelineStore = create<TimelineState>()(
           if (!selectedClip) return state;
 
           if (selectedClip.trackType === "video") {
+            const nextTracks = state.videoTracks.map((tr) => {
+              const filtered = tr.clips.filter((c) => c.id !== selectedClip.clipId);
+              return {
+                ...tr,
+                clips: tr.isOverlay ? filtered : packVideoClips(filtered),
+              };
+            });
+            const newTotal = getVideoTotalDuration(nextTracks);
+            const nextAudio = fitAudioTracksToDuration(state.audioTracks, newTotal);
             return {
               selectedClip: null,
-              videoTracks: state.videoTracks.map((tr) => ({
-                ...tr,
-                clips: tr.clips.filter((c) => c.id !== selectedClip.clipId),
-              })),
+              videoTracks: nextTracks,
+              audioTracks: nextAudio,
+              playheadTime: Math.min(state.playheadTime, newTotal),
             };
           }
 
@@ -617,7 +813,7 @@ export const useTimelineStore = create<TimelineState>()(
               selectedClip: null,
               audioTracks: state.audioTracks.map((tr) => ({
                 ...tr,
-                clips: tr.clips.filter((c) => c.id !== selectedClip.clipId),
+                clips: packAudioClips(tr.clips.filter((c) => c.id !== selectedClip.clipId)),
               })),
             };
           }
@@ -719,19 +915,50 @@ export const useTimelineStore = create<TimelineState>()(
         set((state) => {
           const { selectedClip } = state;
           if (!selectedClip || selectedClip.trackType !== "video") return state;
+          const nextTracks = state.videoTracks.map((tr) => {
+            if (tr.id !== selectedClip.trackId) return tr;
+            const updated = tr.clips.map((c) => {
+              if (c.id !== selectedClip.clipId) return c;
+              const dur = Math.max(
+                0.1,
+                Number(((c.sourceEnd - c.sourceStart) / playbackRate).toFixed(2))
+              );
+              return {
+                ...c,
+                playbackRate,
+                endTime: Number((c.startTime + dur).toFixed(2)),
+              };
+            });
+            return {
+              ...tr,
+              clips: tr.isOverlay ? updated : packVideoClips(updated),
+            };
+          });
+          const newTotal = getVideoTotalDuration(nextTracks);
           return {
-            videoTracks: state.videoTracks.map((tr) =>
-              tr.id === selectedClip.trackId
-                ? {
-                    ...tr,
-                    clips: tr.clips.map((c) =>
-                      c.id === selectedClip.clipId ? { ...c, playbackRate } : c
-                    ),
-                  }
-                : tr
-            ),
+            videoTracks: nextTracks,
+            audioTracks: fitAudioTracksToDuration(state.audioTracks, newTotal),
           };
         }),
+
+      updateClipTransition: (clipId, transitionType, duration) =>
+        set((state) => ({
+          videoTracks: state.videoTracks.map((tr) => ({
+            ...tr,
+            clips: tr.clips.map((c) => {
+              if (c.id !== clipId) return c;
+              const prevDur = c.transitionOut?.duration ?? 0.5;
+              const nextDur = duration !== undefined ? Number(duration.toFixed(2)) : prevDur;
+              return {
+                ...c,
+                transitionOut: {
+                  type: transitionType,
+                  duration: nextDur,
+                },
+              };
+            }),
+          })),
+        })),
 
       detachVideoAudio: (clipId?: string) =>
         set((state) => {
@@ -913,49 +1140,208 @@ export const useTimelineStore = create<TimelineState>()(
           };
         }),
 
-      importMediaFile: (fileUri, mediaType, duration = 30) =>
+      addOverlayClip: (fileUri, mediaKind, duration = 5.0) =>
         set((state) => {
+          const cleanDuration = Math.max(0.5, Number(duration.toFixed(2)));
+          const startTime = Number(state.playheadTime.toFixed(2));
+          const endTime = Number((startTime + cleanDuration).toFixed(2));
+
+          const newClip: VideoClip = {
+            id: `clip_overlay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            sourceFile: fileUri,
+            sourceStart: 0,
+            sourceEnd: cleanDuration,
+            startTime,
+            endTime,
+            playbackRate: 1.0,
+            volume: 1.0,
+            muted: false,
+            mediaKind,
+            position: { x: 0.5, y: 0.5 },
+            scale: 0.4,
+          };
+
+          const hasOverlayTrack = state.videoTracks.some((tr) => tr.id === "track_vid_overlay");
+          const nextVideoTracks = hasOverlayTrack
+            ? state.videoTracks.map((tr) =>
+                tr.id === "track_vid_overlay"
+                  ? { ...tr, clips: [...tr.clips, newClip] }
+                  : tr
+              )
+            : [
+                ...state.videoTracks,
+                {
+                  id: "track_vid_overlay",
+                  nameKey: "tracks.overlayTrack",
+                  isOverlay: true,
+                  clips: [newClip],
+                },
+              ];
+
+          return {
+            videoTracks: nextVideoTracks,
+            selectedClip: {
+              trackType: "video",
+              trackId: "track_vid_overlay",
+              clipId: newClip.id,
+            },
+          };
+        }),
+
+      updateOverlayPosition: (clipId, position, scale) =>
+        set((state) => ({
+          videoTracks: state.videoTracks.map((tr) => ({
+            ...tr,
+            clips: tr.clips.map((c) => {
+              if (c.id !== clipId) return c;
+              return {
+                ...c,
+                position: { ...c.position, ...position },
+                ...(scale !== undefined ? { scale } : {}),
+              };
+            }),
+          })),
+        })),
+
+      importMediaFile: (fileUri, mediaType, duration = 30, isOverlay = false) =>
+        set((state) => {
+          const cleanDuration = Math.max(0.5, Number(duration.toFixed(2)));
+          const ext = fileUri.split(".").pop()?.toLowerCase() || "";
+          const isImage = ["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp"].includes(ext);
+
+          if (isOverlay || isImage) {
+            const startTime = Number(state.playheadTime.toFixed(2));
+            const endTime = Number((startTime + (isImage ? Math.min(cleanDuration, 5.0) : cleanDuration)).toFixed(2));
+
+            const newClip: VideoClip = {
+              id: `clip_overlay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              sourceFile: fileUri,
+              sourceStart: 0,
+              sourceEnd: isImage ? 5.0 : cleanDuration,
+              startTime,
+              endTime,
+              playbackRate: 1.0,
+              volume: 1.0,
+              muted: false,
+              mediaKind: isImage ? "image" : "video",
+              position: { x: 0.5, y: 0.5 },
+              scale: 0.4,
+            };
+
+            const hasOverlayTrack = state.videoTracks.some((tr) => tr.id === "track_vid_overlay");
+            const nextVideoTracks = hasOverlayTrack
+              ? state.videoTracks.map((tr) =>
+                  tr.id === "track_vid_overlay"
+                    ? { ...tr, clips: [...tr.clips, newClip] }
+                    : tr
+                )
+              : [
+                  ...state.videoTracks,
+                  {
+                    id: "track_vid_overlay",
+                    nameKey: "tracks.overlayTrack",
+                    isOverlay: true,
+                    clips: [newClip],
+                  },
+                ];
+
+            return {
+              videoTracks: nextVideoTracks,
+              selectedClip: {
+                trackType: "video",
+                trackId: "track_vid_overlay",
+                clipId: newClip.id,
+              },
+            };
+          }
+
           if (mediaType === "video") {
-            const nextVideoClips = [...state.videoTracks[0].clips];
+            const firstClip = state.videoTracks[0]?.clips[0];
+            const isInitialPlaceholder =
+              state.videoTracks[0].clips.length === 1 &&
+              (firstClip?.id === "clip_v1" || firstClip?.id === "clip_v_sample");
+
+            const nextVideoClips = isInitialPlaceholder
+              ? []
+              : [...state.videoTracks[0].clips];
+
             const lastEnd = nextVideoClips.length > 0
               ? nextVideoClips[nextVideoClips.length - 1].endTime
               : 0;
 
             const newClip: VideoClip = {
-              id: `clip_v_${Date.now()}`,
+              id: `clip_v_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
               sourceFile: fileUri,
               sourceStart: 0,
-              sourceEnd: duration,
+              sourceEnd: cleanDuration,
               startTime: lastEnd,
-              endTime: Number((lastEnd + duration).toFixed(2)),
+              endTime: Number((lastEnd + cleanDuration).toFixed(2)),
               playbackRate: 1.0,
               volume: 1.0,
               muted: false,
+              mediaKind: "video",
             };
 
+            const packedClips = packVideoClips([...nextVideoClips, newClip]);
+            const nextVideoTracks: VideoTrack[] = state.videoTracks.map((tr) =>
+              tr.id === state.videoTracks[0].id ? { ...tr, clips: packedClips } : tr
+            );
+            const newTotal = getVideoTotalDuration(nextVideoTracks);
+            const firstAudio = state.audioTracks[0]?.clips[0];
+            const isAudioPlaceholder =
+              state.audioTracks[0]?.clips.length === 1 &&
+              (firstAudio?.id === "clip_a1" || firstAudio?.id === "clip_a_sample");
+
+            const nextAudioTracks = isAudioPlaceholder
+              ? [
+                  {
+                    ...state.audioTracks[0],
+                    clips: [
+                      {
+                        ...firstAudio,
+                        startTime: 0,
+                        endTime: newTotal,
+                        sourceStart: 0,
+                        sourceEnd: newTotal,
+                      },
+                    ],
+                  },
+                ]
+              : state.audioTracks;
+
             return {
-              videoTracks: [
-                {
-                  ...state.videoTracks[0],
-                  clips: [...nextVideoClips, newClip],
-                },
-              ],
+              videoTracks: nextVideoTracks,
+              audioTracks: nextAudioTracks,
+              selectedClip: {
+                trackType: "video",
+                trackId: state.videoTracks[0].id,
+                clipId: newClip.id,
+              },
+              playheadTime: isInitialPlaceholder ? 0 : state.playheadTime,
             };
           }
 
           if (mediaType === "audio") {
-            const nextAudioClips = [...(state.audioTracks[0]?.clips || [])];
+            const firstAudio = state.audioTracks[0]?.clips[0];
+            const isInitialPlaceholder =
+              (state.audioTracks[0]?.clips || []).length === 1 &&
+              (firstAudio?.id === "clip_a1" || firstAudio?.id === "clip_a_sample");
+
+            const nextAudioClips = isInitialPlaceholder
+              ? []
+              : [...(state.audioTracks[0]?.clips || [])];
+
             const lastEnd = nextAudioClips.length > 0
               ? nextAudioClips[nextAudioClips.length - 1].endTime
               : 0;
 
             const newClip: AudioClip = {
-              id: `clip_a_${Date.now()}`,
+              id: `clip_a_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
               sourceFile: fileUri,
               sourceStart: 0,
-              sourceEnd: duration,
+              sourceEnd: cleanDuration,
               startTime: lastEnd,
-              endTime: Number((lastEnd + duration).toFixed(2)),
+              endTime: Number((lastEnd + cleanDuration).toFixed(2)),
               volume: 1.0,
               fadeIn: 0,
               fadeOut: 0,
@@ -966,9 +1352,14 @@ export const useTimelineStore = create<TimelineState>()(
                 {
                   id: "track_aud_1",
                   nameKey: "tracks.bgm",
-                  clips: [...nextAudioClips, newClip],
+                  clips: packAudioClips([...nextAudioClips, newClip]),
                 },
               ],
+              selectedClip: {
+                trackType: "audio",
+                trackId: "track_aud_1",
+                clipId: newClip.id,
+              },
             };
           }
 

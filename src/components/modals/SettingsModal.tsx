@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   HardwareAcceleration,
@@ -29,7 +29,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     (s) => s.setHardwareAcceleration
   );
 
+  // Local draft state — only committed when user clicks "Save Preferences"
+  const [draftLanguage, setDraftLanguage] = useState<UILanguage>(uiLanguage);
+  const [draftHw, setDraftHw] =
+    useState<HardwareAcceleration>(hardwareAcceleration);
+  const [draftGroq, setDraftGroq] = useState<string>(groqApiKey);
+
+  useEffect(() => {
+    if (isOpen) {
+      setDraftLanguage(uiLanguage);
+      setDraftHw(hardwareAcceleration);
+      setDraftGroq(groqApiKey);
+    }
+  }, [isOpen, uiLanguage, hardwareAcceleration, groqApiKey]);
+
   if (!isOpen) return null;
+
+  const handleSave = () => {
+    if (draftLanguage !== uiLanguage) {
+      setUiLanguage(draftLanguage);
+    }
+    setHardwareAcceleration(draftHw);
+    setGroqApiKey(draftGroq);
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-6 z-50 select-none">
@@ -51,8 +74,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-zinc-400">{t("header.language")}</span>
             <select
-              value={uiLanguage}
-              onChange={(e) => setUiLanguage(e.target.value as UILanguage)}
+              value={draftLanguage}
+              onChange={(e) => setDraftLanguage(e.target.value as UILanguage)}
               className="w-52 bg-[#27272c] border border-[#2a2a2e] rounded px-2.5 py-1.5 text-zinc-200"
             >
               <option value="en">English (en-US)</option>
@@ -64,11 +87,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-zinc-400">{t("settings.hwAccel")}</span>
             <select
-              value={hardwareAcceleration}
+              value={draftHw}
               onChange={(e) =>
-                setHardwareAcceleration(
-                  e.target.value as HardwareAcceleration
-                )
+                setDraftHw(e.target.value as HardwareAcceleration)
               }
               className="w-52 bg-[#27272c] border border-[#2a2a2e] rounded px-2.5 py-1.5 text-zinc-200"
             >
@@ -89,8 +110,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <input
               type="password"
               placeholder="gsk_..."
-              value={groqApiKey}
-              onChange={(e) => setGroqApiKey(e.target.value)}
+              value={draftGroq}
+              onChange={(e) => setDraftGroq(e.target.value)}
               className="w-full bg-[#27272c] border border-[#2a2a2e] rounded px-2.5 py-1.5 font-mono text-zinc-200 focus:outline-none"
             />
           </div>
@@ -99,7 +120,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex justify-end gap-2 pt-1">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded bg-[#00c8d2] text-[#091214] font-semibold hover:opacity-90"
+            className="px-3 py-1.5 rounded bg-[#27272c] hover:bg-zinc-700 text-zinc-300 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-1.5 rounded bg-[#00c8d2] text-[#091214] font-semibold hover:opacity-90 transition"
           >
             {t("settings.saveBtn")}
           </button>

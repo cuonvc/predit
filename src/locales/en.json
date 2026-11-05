@@ -19,14 +19,20 @@
     "deleteClip": "Delete (Del)",
     "undo": "Undo",
     "redo": "Redo",
-    "syncBilingual": "Sync EN/VI Timing"
+    "syncBilingual": "Sync EN/VI Timing",
+    "autoFit": "Auto Fit",
+    "zoomHint": "Ctrl + Scroll to zoom"
   },
   "mediaBin": {
     "title": "Media & AI Captions",
     "cardDesc": "Auto-transcribe speech & translate into synced English + Vietnamese timeline tracks.",
     "sidecarRam": "Sidecar RAM",
     "purged": "0 MB (Purged)",
-    "gpuReady": "NVENC Ready"
+    "gpuReady": "NVENC Ready",
+    "dropzone": "Drag & drop video or audio files here",
+    "dropzoneHint": "Supports MP4, MOV, MKV, WebM, MP3, WAV (or click to browse)",
+    "browse": "Browse Files",
+    "noClips": "No media imported yet"
   },
   "aiCaptions": {
     "title": "Predit AI Bilingual Captions",
@@ -53,8 +59,14 @@
     "fontFamily": "Font Family",
     "fontSize": "Size",
     "textColor": "Color",
-    "borderStroke": "Border Stroke",
+    "borderStroke": "Text Outline",
     "backgroundBox": "Background Box",
+    "bgColor": "Background Color",
+    "bgOpacity": "Background Opacity",
+    "borderColor": "Box Border Color",
+    "borderWidth": "Box Border Width",
+    "borderRadius": "Corner Radius",
+    "overlayScale": "Overlay Size (Scale)",
     "applyToAllTrack": "Apply style to all clips in this track",
     "applyToAllDesc": "Updates parent TextTrack.stylePreset across all clips in this track",
     "playbackSpeed": "Playback Speed",
@@ -62,10 +74,19 @@
     "canvasPos": "Canvas Position (X / Y)",
     "fadeInOut": "Fade In / Out (s)",
     "detachAudio": "Detach Audio to Track",
-    "muteClip": "Mute Clip Audio"
+    "muteClip": "Mute Clip Audio",
+    "transition": "Video Transition",
+    "transitionType": "Transition Effect",
+    "transitionDuration": "Duration",
+    "transNone": "None",
+    "transFade": "Crossfade",
+    "transDipBlack": "Dip to Black",
+    "transWipeLeft": "Wipe Left",
+    "transSlide": "Slide"
   },
   "tracks": {
     "mainVideo": "V1 • Main Video",
+    "overlayTrack": "V2 • Overlays (Image / Video)",
     "bgm": "A1 • BGM Audio",
     "captionsEn": "Captions - EN",
     "captionsVi": "Captions - VI",
