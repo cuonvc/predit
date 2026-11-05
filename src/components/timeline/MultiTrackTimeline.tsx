@@ -50,6 +50,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   const addManualTextClip = useTimelineStore((s) => s.addManualTextClip);
   const moveClip = useTimelineStore((s) => s.moveClip);
   const moveClipToTrack = useTimelineStore((s) => s.moveClipToTrack);
+  const updateClipDuration = useTimelineStore((s) => s.updateClipDuration);
   const importMediaFile = useTimelineStore((s) => s.importMediaFile);
   const toggleTextTrackVisibility = useTimelineStore(
     (s) => s.toggleTextTrackVisibility
@@ -576,6 +577,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   onMoveClip={(newStart) =>
                     moveClip("text", track.id, clip.id, newStart)
                   }
+                  onResizeClip={(newStart, newEnd) =>
+                    updateClipDuration("text", track.id, clip.id, newStart, newEnd)
+                  }
                   onDropOnTrack={(srcId, targetId, newStart) =>
                     moveClipToTrack("text", srcId, targetId, clip.id, newStart)
                   }
@@ -646,6 +650,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   onMoveClip={(newStart) =>
                     moveClip("text", track.id, clip.id, newStart)
                   }
+                  onResizeClip={(newStart, newEnd) =>
+                    updateClipDuration("text", track.id, clip.id, newStart, newEnd)
+                  }
                   onDropOnTrack={(srcId, targetId, newStart) =>
                     moveClipToTrack("text", srcId, targetId, clip.id, newStart)
                   }
@@ -695,6 +702,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   }
                   onMoveClip={(newStart) =>
                     moveClip("text", track.id, clip.id, newStart)
+                  }
+                  onResizeClip={(newStart, newEnd) =>
+                    updateClipDuration("text", track.id, clip.id, newStart, newEnd)
                   }
                   onDropOnTrack={(srcId, targetId, newStart) =>
                     moveClipToTrack("text", srcId, targetId, clip.id, newStart)
@@ -752,6 +762,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                     }
                     onMoveClip={(newStart) =>
                       moveClip("video", track.id, clip.id, newStart)
+                    }
+                    onResizeClip={(newStart, newEnd) =>
+                      updateClipDuration("video", track.id, clip.id, newStart, newEnd)
                     }
                     onDropOnTrack={(srcId, targetId, newStart) =>
                       moveClipToTrack("video", srcId, targetId, clip.id, newStart)
@@ -842,6 +855,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                     onMoveClip={(newStart) =>
                       moveClip("video", track.id, clip.id, newStart)
                     }
+                    onResizeClip={(newStart, newEnd) =>
+                      updateClipDuration("video", track.id, clip.id, newStart, newEnd)
+                    }
                     onDropOnTrack={(srcId, targetId, newStart) =>
                       moveClipToTrack("video", srcId, targetId, clip.id, newStart)
                     }
@@ -898,6 +914,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                     }
                     onMoveClip={(newStart) =>
                       moveClip("audio", track.id, clip.id, newStart)
+                    }
+                    onResizeClip={(newStart, newEnd) =>
+                      updateClipDuration("audio", track.id, clip.id, newStart, newEnd)
                     }
                     onDropOnTrack={(srcId, targetId, newStart) =>
                       moveClipToTrack("audio", srcId, targetId, clip.id, newStart)

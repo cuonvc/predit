@@ -192,6 +192,13 @@ export interface TimelineState {
     clipId: string,
     newStartTime: number
   ) => void;
+  updateClipDuration: (
+    trackType: "video" | "audio" | "text",
+    trackId: string,
+    clipId: string,
+    newStartTime: number,
+    newEndTime: number
+  ) => void;
   updateOverlayPosition: (
     clipId: string,
     position: { x: number; y: number },
@@ -1443,6 +1450,133 @@ export const useTimelineStore = create<TimelineState>()(
       moveClip: (trackType, trackId, clipId, newStartTime) => {
         get().moveClipToTrack(trackType, trackId, trackId, clipId, newStartTime);
       },
+
+      updateClipDuration: (trackType, trackId, clipId, newStartTime, newEndTime) =>
+        set((state) => {
+          const cleanStart = Math.max(0, Number(newStartTime.toFixed(2)));
+          const cleanEnd = Math.max(cleanStart + 0.1, Number(newEndTime.toFixed(2)));
+
+          // --- 1. TEXT CLIPS ---
+          if (trackType === "text") {
+            const sourceTrack = state.textTracks.find((tr) => tr.id === trackId);
+            const targetClip = sourceTrack?.clips.find((c) => c.id === clipId);
+            if (!sourceTrack || !targetClip) return state;
+
+            const linkedGroupId = state.project.syncLinkedTextClips
+              ? targetClip.linkedGroupId
+              : null;
+
+            return {
+              textTracks: state.textTracks.map((tr) => {
+                const hasTarget = tr.id === trackId;
+                const hasLinked =
+                  linkedGroupId &&
+                  tr.clips.some((c) => c.linkedGroupId === linkedGroupId);
+                if (!hasTarget && !hasLinked) return tr;
+
+                return {
+                  ...tr,
+                  clips: tr.clips.map((c) => {
+                    if (c.id === clipId || (linkedGroupId && c.linkedGroupId === linkedGroupId)) {
+                      return {
+                        ...c,
+                        startTime: cleanStart,
+                        endTime: cleanEnd,
+                      };
+                    }
+                    return c;
+                  }),
+                };
+              }),
+            };
+          }
+
+          // --- 2. VIDEO / OVERLAY / IMAGE CLIPS ---
+          if (trackType === "video") {
+            const track = state.videoTracks.find((tr) => tr.id === trackId);
+            const targetClip = track?.clips.find((c) => c.id === clipId);
+            if (!track || !targetClip) return state;
+
+            return {
+              videoTracks: state.videoTracks.map((tr) => {
+                if (tr.id !== trackId) return tr;
+                return {
+                  ...tr,
+                  clips: tr.clips.map((c) => {
+                    if (c.id !== clipId) return c;
+                    const isImage = c.mediaKind === "image";
+                    if (isImage) {
+                      const dur = Number((cleanEnd - cleanStart).toFixed(2));
+                      return {
+                        ...c,
+                        startTime: cleanStart,
+                        endTime: cleanEnd,
+                        sourceStart: 0,
+                        sourceEnd: dur,
+                      };
+                    } else {
+                      const rate = c.playbackRate || 1.0;
+                      const startDelta = cleanStart - c.startTime;
+                      const newSourceStart = Math.max(
+                        0,
+                        Number((c.sourceStart + startDelta * rate).toFixed(2))
+                      );
+                      const dur = cleanEnd - cleanStart;
+                      const newSourceEnd = Number(
+                        (newSourceStart + dur * rate).toFixed(2)
+                      );
+                      return {
+                        ...c,
+                        startTime: cleanStart,
+                        endTime: cleanEnd,
+                        sourceStart: newSourceStart,
+                        sourceEnd: newSourceEnd,
+                      };
+                    }
+                  }),
+                };
+              }),
+            };
+          }
+
+          // --- 3. AUDIO CLIPS ---
+          if (trackType === "audio") {
+            const track = state.audioTracks.find((tr) => tr.id === trackId);
+            const targetClip = track?.clips.find((c) => c.id === clipId);
+            if (!track || !targetClip) return state;
+
+            return {
+              audioTracks: state.audioTracks.map((tr) => {
+                if (tr.id !== trackId) return tr;
+                return {
+                  ...tr,
+                  clips: tr.clips.map((c) => {
+                    if (c.id !== clipId) return c;
+                    const rate = c.playbackRate || 1.0;
+                    const startDelta = cleanStart - c.startTime;
+                    const newSourceStart = Math.max(
+                      0,
+                      Number((c.sourceStart + startDelta * rate).toFixed(2))
+                    );
+                    const dur = cleanEnd - cleanStart;
+                    const newSourceEnd = Number(
+                      (newSourceStart + dur * rate).toFixed(2)
+                    );
+                    return {
+                      ...c,
+                      startTime: cleanStart,
+                      endTime: cleanEnd,
+                      sourceStart: newSourceStart,
+                      sourceEnd: newSourceEnd,
+                    };
+                  }),
+                };
+              }),
+            };
+          }
+
+          return state;
+        }),
 
       moveClipToTrack: (
         trackType,
