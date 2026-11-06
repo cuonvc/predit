@@ -5,28 +5,30 @@ This reference defines the 5-step speech-to-text, translation, and export pipeli
 ## 1. 5-Step Execution Pipeline
 
 ```
-[Input Video]
+[Input Video / Selected Clip]
      │
      ▼ Step 1: Audio Extraction (FFmpeg Sidecar)
-  - Local Whisper: 16kHz Mono PCM WAV
-  - Groq Cloud: 64kbps Mono MP3 (~4.5MB per 10 mins)
+  - 16kHz Mono PCM WAV (timestamped temporary filename to avoid cache collision)
      │
      ▼ Step 2: Speech-to-Text & RAM Lifecycle
-  - Mode A (Local): Spawns ephemeral whisper-cli; reclaims 100% RAM on exit
-  - Mode B (Groq Cloud): Uploads to whisper-large-v3-turbo (verbose_json + word timestamps)
+  - Local whisper-cli execution using standardized ggml-base.bin (140 MB)
+  - Spawns as ephemeral subprocess; reclaims 100% OS RAM/VRAM immediately upon exit
      │
      ▼ Step 3: Smart Caption Segmentation (captionChunker.ts)
   - Max characters per caption clip: 42 characters (or 7-9 words)
   - Split threshold: pause > 0.45s between words, or sentence punctuation (., ?, !, :)
      │
-     ▼ Step 4: Batch Bilingual Translation (groqTranslator.ts)
-  - Batching: 45 segments per request
-  - Model: llama-3.3-70b-versatile with response_format: { type: "json_object" }
+     ▼ Step 4: Translation Routing (groqTranslator.ts)
+  - If Monolingual: Skip translation entirely; map transcribed segments directly to 1 track
+  - If Bilingual: Batch 20 segments per request to Groq API with JSON mode enabled
+  - Primary model: openai/gpt-oss-120b; fallbacks: openai/gpt-oss-20b, qwen/qwen3.8-27b, llama-3.3-70b
+  - Automatic HTTP 429 rate-limit pending countdown & retry (up to 6 attempts)
   - Strip timestamps from payload to prevent LLM timing float corruption
      │
-     ▼ Step 5: Dual-Track Timeline Injection (useTimelineStore.ts)
-  - Spawns parallel track_text_en (y: 0.78) and track_text_vi (y: 0.86)
-  - Links corresponding clips with linkedGroupId: "pair_{id}"
+     ▼ Step 5: Dual-Track or Single-Track Timeline Injection (useTimelineStore.ts)
+  - Bilingual: Spawns parallel track_text_en (y: 0.78) and track_text_vi (y: 0.86)
+    linked via linkedGroupId: "pair_{id}"
+  - Monolingual: Spawns 1 text track at standard subtitle position
 ```
 
 ---
@@ -43,14 +45,22 @@ This reference defines the 5-step speech-to-text, translation, and export pipeli
 ## 3. Groq Translation Conventions (`groqTranslator.ts`)
 
 * **Endpoint**: `https://api.groq.com/openai/v1/chat/completions`
-* **Model**: `llama-3.3-70b-versatile`
-* **Temperature**: `0.2`
-* **Batch Size**: `45` items per request. (A 10-minute vlog with ~180 segments takes only 4 API calls).
-* **System Prompt**: Enforce strict JSON output with format:
+* **Active Candidate Models (Priority Order)**:
+  1. `openai/gpt-oss-120b` (Deepest reasoning & nuanced Vietnamese translation)
+  2. `openai/gpt-oss-20b` (Ultra-fast ~1000 tps)
+  3. `qwen/qwen3.8-27b` (High-quality 27B multilingual)
+  4. `llama-3.3-70b-versatile` & `llama-3.1-8b-instant` (Secondary fallbacks)
+* **Temperature**: `0.1` (low temperature to prevent creative drift or hallucinations)
+* **Batch Size**: `20` items per request (safely under the free-tier 1000 OTPM ceiling)
+* **System Prompt**: Enforces strict JSON output with format:
   ```json
   { "translations": [{ "id": 1, "en": "...", "vi": "..." }] }
   ```
-* **Offline Fallback**: When no API key is supplied, provide human-readable preview translations without crashing.
+  * Note: The `"vi"` field is strictly enforced to always contain proper Vietnamese with full diacritics.
+* **HTTP 429 Rate Limit Pending Mechanism**:
+  * Automatically parses retry wait duration from Groq response headers or error body (`"Please try again in X.Xs"`).
+  * Adds +2s buffer and ticks a live 1-second countdown in the UI via `onRateLimitPending`.
+  * Retries up to 6 times per batch automatically so even long 30-minute videos translate without crashing.
 
 ---
 

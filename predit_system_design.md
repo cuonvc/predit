@@ -69,8 +69,8 @@
 | **State & History** | **Zustand + `zundo` middleware** | Lightweight reactive timeline state with out-of-the-box snapshot-based Undo (`Ctrl+Z`) and Redo (`Ctrl+Y`). |
 | **Audio Waveform** | **Wavesurfer.js / Web Audio API** | Renders visual audio waveforms on timeline clips to easily spot pauses and speech beats. |
 | **Video Engine** | **Native FFmpeg & FFprobe Sidecars** | Hardware-accelerated encoding (`h264_nvenc`, `h264_qsv`, `h264_videotoolbox`), audio extraction, `xfade` transitions, and `.ass` subtitle burn-in. |
-| **Speech-to-Text** | **Hybrid Toggle:** `whisper-cli` Sidecar (Local) **OR** Groq `whisper-large-v3-turbo` (Cloud) | Flexibility between 100% offline execution with automatic OS memory reclamation and ultra-fast cloud inference on low-spec hardware. |
-| **Translation** | **Groq Cloud API (`llama-3.3-70b-versatile`)** | Free-tier JSON batch translation delivering idiomatic, screen-fitted English ↔ Vietnamese subtitles at ~300+ tokens/sec. |
+| **Speech-to-Text** | **Local `whisper-cli` Sidecar (`ggml-base.bin`)** | Bundled, lightweight (140 MB) offline transcription with 100% ephemeral OS memory reclamation upon process termination. |
+| **Translation** | **Groq Cloud API (`openai/gpt-oss-120b`)** | Free-tier JSON batch translation with intelligent multi-model failover (`openai/gpt-oss-20b`, `qwen/qwen3.8-27b`, `llama-3.3-70b-versatile`) and automated HTTP 429 rate-limit pending retry. |
 
 ## 4. Core Feature Specifications
 
@@ -220,38 +220,29 @@ Predit supports instant switching between **English (`en`)** and **Vietnamese (`
 
 ### 5.1 UI Engine Selector & Settings
 
-In the **Predit AI Captions Panel (`Phụ đề song ngữ Predit AI`)**, the user configures:
+In the **Predit AI Captions Modal (`AutoCaptionModal.tsx`)**, the UI provides a simplified, focused workflow:
 
-* **Transcription Engine Toggle:**
-  * `[Local Whisper (Offline)]` — Spawns the bundled `whisper-cli` sidecar binary on local CPU/GPU. Zero network upload required.
-  * `[Groq Cloud Whisper (Fast)]` — Compresses audio to a lightweight mono `.mp3` via the `ffmpeg` sidecar and calls Groq's `whisper-large-v3-turbo` endpoint. Ideal when editing on a lightweight laptop or integrated GPU.
-* **Local Model Selector:** `whisper-small` (~480 MB) vs. `whisper-large-v3-turbo-q5_0` (~1.1 GB), stored in the user's `AppData/Roaming/com.predit.app/models/` directory.
-* **Caption Track Generation Mode:**
-  * `Bilingual (2 Tracks: EN + VI)` — Spawns both English and Vietnamese text tracks.
-  * `Monolingual (1 Track: EN or VI)` — Spawns a single text track.
-* **Groq API Key Input:** Stored locally in Predit's configuration (`gsk_...`).
+* **Standardized Local Whisper Engine:** Audio extraction and transcription are hardcoded to local `whisper-cli` with `ggml-base.bin` (140 MB), eliminating configuration clutter and ensuring consistent offline transcription.
+* **Output Track Generation Mode (Option Cards):**
+  * `Bilingual (Song ngữ)` — Transcribes via local Whisper, then prompts for the Groq API key to generate synchronized English (top, `y: 0.78`) and Vietnamese (bottom, `y: 0.86`) subtitle tracks.
+  * `Monolingual (Đơn ngữ)` — Transcribes via local Whisper and generates a single track in the video's original speech language (100% offline, zero API key required).
+* **Information Tooltips (`NoteTooltip`):** Clean circular `ⓘ` icons with CapCut dark tooltips explain each mode without cluttering cards.
+* **Groq API Key Input:** Conditionally rendered only when `Bilingual` mode is active.
 
 ### 5.2 Step-by-Step Execution Flow
 
-#### Step 1: Audio Extraction & Compression (via FFmpeg Sidecar)
+#### Step 1: Audio Extraction (via FFmpeg Sidecar)
 
-* **If Local Whisper is selected:** Extract 16kHz mono PCM WAV for immediate local processing:
+* Extract 16kHz mono PCM WAV with timestamped temporary filenames (`temp_audio_16k_${Date.now()}.wav`) to avoid caching collisions:
   ```bash
-  ffmpeg -y -i input_timeline.mp4 -vn -acodec pcm_s16le -ar 16000 -ac 1 temp_audio.wav
-  ```
-* **If Groq Cloud Whisper is selected:** Compress to 64kbps mono MP3 (~4.5 MB per 10-minute video, well below Groq's 25 MB limit):
-  ```bash
-  ffmpeg -y -i input_timeline.mp4 -vn -ac 1 -ar 16000 -b:a 64k temp_audio.mp3
+  ffmpeg -y -i input_timeline.mp4 -vn -acodec pcm_s16le -ar 16000 -ac 1 temp_audio_16k_timestamp.wav
   ```
 
 #### Step 2: Speech-to-Text & Lazy-Load RAM Lifecycle
 
-* **Mode A — Local Whisper Sidecar (`whisper-cli`):**
-  1. Spawn ephemeral `whisper-cli` sidecar subprocess via `@tauri-apps/plugin-shell`.
-  2. Transcribe with word-level timestamps enabled (`-ml 1` or `-oj`).
-  3. **Immediate Memory Purge:** As soon as `whisper-cli` writes the JSON output and exits, the OS destroys the child process and reclaims 100% of the ~1.2 GB RAM/VRAM before translation begins.
-* **Mode B — Groq Cloud Whisper:**
-  1. Send `multipart/form-data` POST request to `https://api.groq.com/openai/v1/audio/transcriptions` with `model="whisper-large-v3-turbo"`, `response_format="verbose_json"`, and `timestamp_granularities=["word", "segment"]`.
+1. Spawn ephemeral `whisper-cli` sidecar subprocess via `@tauri-apps/plugin-shell` using `resources/models/ggml-base.bin`.
+2. Transcribe speech with word-level timestamps (`-oj` / `--output-json`).
+3. **Immediate Memory Purge:** As soon as `whisper-cli` outputs JSON tokens and exits, the OS reclaims 100% of RAM/VRAM before translation begins.
 
 #### Step 3: Smart Caption Segmentation (`captionChunker.ts`)
 
@@ -259,21 +250,32 @@ Before translating, group raw word timestamps into readable single-line caption 
 * **Max Characters per Caption Clip:** `42 characters` (or `7–9 words`).
 * **Pause Threshold:** Split into a new caption segment whenever the gap between `word[i].end` and `word[i+1].start` exceeds `0.45 seconds`, or upon encountering punctuation (`.`, `?`, `!`, `,`).
 
-#### Step 4: Batch Bilingual Translation via Groq (`llama-3.3-70b-versatile`)
+#### Step 4: Batch Bilingual Translation & 429 Pending Recovery (`groqTranslator.ts`)
 
-1. Strip `start` and `end` timestamps from the payload so the LLM cannot corrupt timing floats.
-2. Group segments into batches of **45 items per request** (a 10-minute video with ~180 caption lines requires only **4 API calls**, taking ~3 seconds total and staying well inside Groq's 30 RPM / 12,000 TPM free tier).
-3. Enforce `response_format: { "type": "json_object" }`.
+1. If **Monolingual Mode**: Skip translation entirely; map speech segments directly to the timeline.
+2. If **Bilingual Mode**:
+   - Strip `start` and `end` timestamps from the payload so the LLM cannot corrupt timing floats.
+   - Batch **20 segments per request** to keep output token generation comfortably under Groq free-tier limits (1000 OTPM).
+   - Candidate models in priority order:
+     * `openai/gpt-oss-120b` (Primary smart translation)
+     * `openai/gpt-oss-20b` (Fast ~1000 tps fallback)
+     * `qwen/qwen3.8-27b` (High-quality 27B multilingual fallback)
+     * `llama-3.3-70b-versatile` & `llama-3.1-8b-instant` (Secondary fallbacks)
+   - **HTTP 429 Rate Limit Pending Mechanism:**
+     * Parses cooldown from headers or `"Please try again in X.Xs"` in error text.
+     * Emits 1-second countdown ticks to the UI (`onRateLimitPending`).
+     * Automatically retries the batch up to 6 times before failing.
+   - Enforce `response_format: { "type": "json_object" }` with `temperature: 0.1`.
 
 ```json
 {
-  "model": "llama-3.3-70b-versatile",
-  "temperature": 0.2,
+  "model": "openai/gpt-oss-120b",
+  "temperature": 0.1,
   "response_format": { "type": "json_object" },
   "messages": [
     {
       "role": "system",
-      "content": "You are a bilingual video subtitle translator (English and Vietnamese) for the Predit video editor. Receive a JSON list of subtitle segments with 'id' and 'src'. Detect the source language of each segment and produce natural, concise 'en' and 'vi' lines suitable for short on-screen video captions. Preserve technical software terms naturally. Output strictly in JSON: {\"translations\": [{\"id\": 1, \"en\": \"...\", \"vi\": \"...\"}]}"
+      "content": "You are an expert bilingual subtitle translator (English and Vietnamese) for the Predit video editor. Translate each subtitle segment between English and Vietnamese naturally and accurately for on-screen video captions. Output strictly in JSON: {\"translations\": [{\"id\": 1, \"en\": \"...\", \"vi\": \"...\"}]}"
     },
     {
       "role": "user",
@@ -283,11 +285,15 @@ Before translating, group raw word timestamps into readable single-line caption 
 }
 ```
 
-#### Step 5: Dual-Track Injection into Timeline State
+#### Step 5: Dual-Track or Single-Track Timeline Injection
 
-Match the returned `id` values back to the local `{ startTime, endTime }` array and dispatch a single `injectBilingualTextTracks(segments)` action in Zustand:
-1. Create `track_text_en` (Row 1) with English default styling (`y: 0.78`, white text).
-2. Create `track_text_vi` (Row 2) with Vietnamese default styling (`y: 0.86`, yellow text).
+Match the returned `id` values back to the local `{ startTime, endTime }` array and dispatch `injectBilingualTextTracks(segments, captionTrackMode)` in Zustand:
+1. In Bilingual Mode:
+   - Create `track_text_en` (Row 1, `y: 0.78`, white text).
+   - Create `track_text_vi` (Row 2, `y: 0.86`, yellow text).
+   - Link corresponding EN and VI clips via `linkedGroupId: "pair_" + id`.
+2. In Monolingual Mode:
+   - Create a single subtitle track with native speech text.
 3. For each segment `i`, push an English `TextClip` into `track_text_en.clips` and a Vietnamese `TextClip` into `track_text_vi.clips`, linked by `"linkedGroupId": "pair_" + i`.
 
 ## 6. Predit Timeline State & Project File Schema (`.predit`)
