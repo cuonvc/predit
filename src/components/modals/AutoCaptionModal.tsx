@@ -628,41 +628,8 @@ export const AutoCaptionModal: React.FC = () => {
         </button>
       </div>
 
-      {/* Split Body: Left Tree Menu + Content Area */}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="w-28 border-r border-[#2a2a2e] p-2 space-y-1 text-xs shrink-0">
-          <button
-            onClick={() => setLeftTab("media")}
-            className={`w-full text-left px-2 py-1.5 rounded truncate ${
-              leftTab === "media"
-                ? "bg-[#27272c] text-[#00d2dc] font-medium"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            Local media
-          </button>
-          <button
-            onClick={() => setLeftTab("text")}
-            className={`w-full text-left px-2 py-1.5 rounded truncate ${
-              leftTab === "text"
-                ? "bg-[#27272c] text-[#00d2dc] font-medium"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            {t("toolbar.addText")}
-          </button>
-          <button
-            onClick={() => setLeftTab("captions")}
-            className={`w-full text-left px-2 py-1.5 rounded truncate ${
-              leftTab === "captions"
-                ? "bg-[#27272c] text-[#00d2dc] font-medium"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            Auto captions
-          </button>
-        </div>
-
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-hidden flex flex-col">
         {/* 1. Media View */}
         {leftTab === "media" && (
           <div className="flex-1 p-3 space-y-3 overflow-y-auto text-xs flex flex-col">
