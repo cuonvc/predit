@@ -76,11 +76,17 @@ export interface TextBackgroundBox {
 }
 
 export interface TextStylePreset {
-  fontFamily: "Be Vietnam Pro" | "Inter" | "Montserrat";
+  fontFamily: "System Default" | "Be Vietnam Pro" | "Inter" | "Montserrat" | string;
   fontSize: number;
   color: string;
   strokeColor: string;
   strokeWidth: number;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  textAlign?: "left" | "center" | "right";
+  verticalAlign?: "top" | "middle" | "bottom";
+  textShadow?: string;
   backgroundBox: TextBackgroundBox;
   position: {
     x: number;
@@ -217,15 +223,21 @@ const DEFAULT_ASPECT_RATIOS: Record<
 };
 
 const DEFAULT_MANUAL_STYLE: TextStylePreset = {
-  fontFamily: "Inter",
+  fontFamily: "System Default",
   fontSize: 56,
   color: "#FFFFFF",
   strokeColor: "#000000",
-  strokeWidth: 3,
+  strokeWidth: 0,
+  bold: false,
+  italic: false,
+  underline: false,
+  textAlign: "center",
+  verticalAlign: "middle",
+  textShadow: "",
   backgroundBox: {
     enabled: false,
     color: "#000000",
-    opacity: 0.65,
+    opacity: 1.0,
     padding: 10,
     borderRadius: 8,
     borderColor: "#00c8d2",
@@ -235,15 +247,21 @@ const DEFAULT_MANUAL_STYLE: TextStylePreset = {
 };
 
 const DEFAULT_EN_CAPTION_STYLE: TextStylePreset = {
-  fontFamily: "Be Vietnam Pro",
+  fontFamily: "System Default",
   fontSize: 44,
   color: "#FFFFFF",
   strokeColor: "#000000",
-  strokeWidth: 4,
+  strokeWidth: 0,
+  bold: false,
+  italic: false,
+  underline: false,
+  textAlign: "center",
+  verticalAlign: "middle",
+  textShadow: "",
   backgroundBox: {
-    enabled: true,
+    enabled: false,
     color: "#000000",
-    opacity: 0.65,
+    opacity: 1.0,
     padding: 10,
     borderRadius: 8,
     borderColor: "#FFFFFF",
@@ -253,15 +271,21 @@ const DEFAULT_EN_CAPTION_STYLE: TextStylePreset = {
 };
 
 const DEFAULT_VI_CAPTION_STYLE: TextStylePreset = {
-  fontFamily: "Be Vietnam Pro",
+  fontFamily: "System Default",
   fontSize: 36,
   color: "#FFD700",
   strokeColor: "#000000",
-  strokeWidth: 4,
+  strokeWidth: 0,
+  bold: false,
+  italic: false,
+  underline: false,
+  textAlign: "center",
+  verticalAlign: "middle",
+  textShadow: "",
   backgroundBox: {
-    enabled: true,
+    enabled: false,
     color: "#000000",
-    opacity: 0.65,
+    opacity: 1.0,
     padding: 10,
     borderRadius: 8,
     borderColor: "#FFD700",

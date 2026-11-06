@@ -16,6 +16,13 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+function resolveCssFontFamily(family?: string): string {
+  if (!family || family === "System Default" || family === "system-ui") {
+    return "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+  }
+  return `"${family}", sans-serif`;
+}
+
 /** Renders an active image or PIP video overlay on the preview canvas */
 const OverlayLayerItem: React.FC<{
   clip: VideoClip;
@@ -706,7 +713,7 @@ export const VideoPreviewCanvas: React.FC = () => {
             );
             const bgBox = effectiveStyle.backgroundBox;
             const bgColorCss = bgBox.enabled
-              ? hexToRgba(bgBox.color || "#000000", bgBox.opacity ?? 0.65)
+              ? hexToRgba(bgBox.color || "#000000", bgBox.opacity ?? 1.0)
               : "transparent";
             const boxBorderWidth = bgBox.enabled ? bgBox.borderWidth ?? 0 : 0;
             const boxBorderColor = bgBox.borderColor || "#00c8d2";
@@ -737,10 +744,29 @@ export const VideoPreviewCanvas: React.FC = () => {
                   top: topPercent,
                   left: leftPercent,
                   transform: "translate(-50%, -50%)",
-                  fontFamily: effectiveStyle.fontFamily,
+                  fontFamily: resolveCssFontFamily(effectiveStyle.fontFamily),
                   fontSize: `${scaledFontPx}px`,
-                  lineHeight: 1.25,
+                  fontWeight: effectiveStyle.bold ? 700 : 500,
+                  fontStyle: effectiveStyle.italic ? "italic" : "normal",
+                  textDecoration: effectiveStyle.underline ? "underline" : "none",
+                  textAlign: effectiveStyle.textAlign || "center",
+                  display: "inline-flex",
+                  flexDirection: "column",
+                  alignItems:
+                    effectiveStyle.textAlign === "left"
+                      ? "flex-start"
+                      : effectiveStyle.textAlign === "right"
+                      ? "flex-end"
+                      : "center",
+                  justifyContent:
+                    effectiveStyle.verticalAlign === "top"
+                      ? "flex-start"
+                      : effectiveStyle.verticalAlign === "bottom"
+                      ? "flex-end"
+                      : "center",
+                  lineHeight: 1.3,
                   color: effectiveStyle.color,
+                  textShadow: effectiveStyle.textShadow || undefined,
                   backgroundColor: bgColorCss,
                   borderRadius: `${boxRadius}px`,
                   borderWidth: `${boxBorderWidth}px`,
@@ -748,12 +774,13 @@ export const VideoPreviewCanvas: React.FC = () => {
                   borderColor: boxBorderColor,
                   WebkitTextStroke:
                     strokeW > 0
-                      ? `${Math.max(0.5, strokeW * 0.35)}px ${
+                      ? `${Math.max(1, strokeW * 0.8)}px ${
                           effectiveStyle.strokeColor || "#000000"
                         }`
                       : undefined,
+                  paintOrder: "stroke fill",
                 }}
-                className={`absolute z-20 px-2.5 py-1 cursor-move whitespace-nowrap font-semibold select-none transition-shadow ${
+                className={`absolute z-20 px-2.5 py-1 cursor-move whitespace-pre-wrap select-none transition-shadow ${
                   isSelected
                     ? "ring-2 ring-[#00c8d2] shadow-lg"
                     : "hover:ring-1 hover:ring-white/60"

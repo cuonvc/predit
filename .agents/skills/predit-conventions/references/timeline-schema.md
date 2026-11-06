@@ -82,19 +82,25 @@ Manual text and AI-generated captions use the **identical** `TextTrack` and `Tex
 
 ```typescript
 export interface TextBackgroundBox {
-  enabled: boolean;
+  enabled: boolean;                // Default: false (Transparent background by default)
   color: string;                   // Hex string (e.g. "#000000")
-  opacity: number;                 // 0.0 to 1.0 (Default: 0.65)
+  opacity: number;                 // 0.0 to 1.0 (Default: 1.0)
   padding: number;                 // Padding in pixels (Default: 10)
   borderRadius: number;            // Radius in pixels (Default: 8)
 }
 
 export interface TextStylePreset {
-  fontFamily: "Be Vietnam Pro" | "Inter" | "Montserrat";
+  fontFamily: "System Default" | "Be Vietnam Pro" | "Inter" | "Montserrat" | string;
   fontSize: number;                // In pixels: 44 (EN caption), 36 (VI caption), 56 (Manual)
   color: string;                   // Hex (e.g. "#FFFFFF" for EN, "#FFD700" / "#FBBF24" for VI)
   strokeColor: string;             // Hex (Default: "#000000")
-  strokeWidth: number;             // Border stroke width in px (Default: 3 or 4)
+  strokeWidth: number;             // Border stroke width in px (Default: 0, range 0-16)
+  bold?: boolean;                  // Pattern: Bold (Default: false)
+  italic?: boolean;                // Pattern: Italic (Default: false)
+  underline?: boolean;             // Pattern: Underline (Default: false)
+  textAlign?: "left" | "center" | "right"; // Alignment horizontal (Default: "center")
+  verticalAlign?: "top" | "middle" | "bottom"; // Alignment vertical (Default: "middle")
+  textShadow?: string;             // CapCut Preset style shadow/glow (e.g. "2px 2px 0px #000000")
   backgroundBox: TextBackgroundBox;
   position: {
     x: number;                     // Normalized 0.0 - 1.0 (0.5 = center)

@@ -70,9 +70,15 @@ export function compileUnifiedAssFile(
       ? hexToAssColor(preset.backgroundBox.color, preset.backgroundBox.opacity)
       : "&HFF000000";
     const borderStyle = preset.backgroundBox.enabled ? 3 : 1;
+    const effectiveFontFamily =
+      !preset.fontFamily ||
+      preset.fontFamily === "System Default" ||
+      preset.fontFamily === "system-ui"
+        ? "Segoe UI"
+        : preset.fontFamily;
 
     styleLines.push(
-      `Style: ${track.id},${preset.fontFamily},${preset.fontSize},${primaryColor},${outlineColor},${backColor},-1,${borderStyle},${preset.strokeWidth},0,5,0`
+      `Style: ${track.id},${effectiveFontFamily},${preset.fontSize},${primaryColor},${outlineColor},${backColor},-1,${borderStyle},${preset.strokeWidth},0,5,0`
     );
 
     const layer = track.role === "manual_text" ? 2 : 1 + (trackIdx % 2);
@@ -90,6 +96,40 @@ export function compileUnifiedAssFile(
       }
       if (clip.overrideStyle?.fontSize) {
         overrideTags.push(`\\fs${clip.overrideStyle.fontSize}`);
+      }
+
+      const isBold = clip.overrideStyle?.bold ?? preset.bold;
+      const isItalic = clip.overrideStyle?.italic ?? preset.italic;
+      const isUnderline = clip.overrideStyle?.underline ?? preset.underline;
+      const textAlign = clip.overrideStyle?.textAlign || preset.textAlign || "center";
+      const verticalAlign = clip.overrideStyle?.verticalAlign || preset.verticalAlign || "middle";
+
+      if (isBold) overrideTags.push("\\b1");
+      if (isItalic) overrideTags.push("\\i1");
+      if (isUnderline) overrideTags.push("\\u1");
+
+      let assAlign = 5;
+      if (verticalAlign === "top") {
+        assAlign = textAlign === "left" ? 7 : textAlign === "right" ? 9 : 8;
+      } else if (verticalAlign === "bottom") {
+        assAlign = textAlign === "left" ? 1 : textAlign === "right" ? 3 : 2;
+      } else {
+        assAlign = textAlign === "left" ? 4 : textAlign === "right" ? 6 : 5;
+      }
+      overrideTags.push(`\\an${assAlign}`);
+
+      const shadow = clip.overrideStyle?.textShadow ?? preset.textShadow;
+      if (shadow) {
+        if (shadow.includes("0 0")) {
+          overrideTags.push("\\blur4");
+        } else if (shadow.includes("2px 2px")) {
+          overrideTags.push("\\shad2");
+          if (shadow.includes("#00FF44")) {
+            overrideTags.push("\\4c&H44FF00&");
+          } else if (shadow.includes("#FF0000")) {
+            overrideTags.push("\\4c&H0000FF&");
+          }
+        }
       }
 
       const startAss = secondsToAssTime(clip.startTime);
