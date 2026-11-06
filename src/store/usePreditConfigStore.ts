@@ -4,11 +4,7 @@ import i18n from "i18next";
 
 export type UILanguage = "en" | "vi";
 export type TranscriptionEngine = "local_whisper" | "groq_cloud";
-export type LocalWhisperModel =
-  | "ggml-large-v3-turbo-q5_0.bin"
-  | "ggml-small.bin"
-  | "ggml-base.bin"
-  | "ggml-tiny.bin";
+export type LocalWhisperModel = "ggml-base.bin";
 export type CaptionTrackMode = "bilingual" | "monolingual";
 export type HardwareAcceleration = "auto" | "nvenc" | "videotoolbox" | "cpu";
 
@@ -40,7 +36,7 @@ export const usePreditConfigStore = create<PreditConfigState>()(
       hardwareAcceleration: "auto",
       transcriptionEngine: "local_whisper",
       localWhisperModel: "ggml-base.bin",
-      translationModel: "llama-3.3-70b-versatile",
+      translationModel: "openai/gpt-oss-120b",
       captionTrackMode: "bilingual",
       groqApiKey: "",
       sidecarRamStatus: "purged",

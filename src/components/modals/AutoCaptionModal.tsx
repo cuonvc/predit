@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { Info } from "lucide-react";
 import {
   CaptionTrackMode,
   LocalWhisperModel,
@@ -146,6 +147,48 @@ const VideoMediaCard: React.FC<{
   );
 };
 
+/** Renders a CapCut-styled note icon that reveals description on hover */
+const NoteTooltip: React.FC<{
+  text: string;
+  align?: "left" | "right" | "center";
+  position?: "top" | "bottom";
+}> = ({ text, align = "left", position = "top" }) => {
+  const alignClass =
+    align === "right"
+      ? "right-0"
+      : align === "center"
+      ? "left-1/2 -translate-x-1/2"
+      : "left-0";
+
+  const posClass =
+    position === "bottom" ? "top-full mt-1.5" : "bottom-full mb-1.5";
+
+  return (
+    <div
+      className="relative group/note inline-flex items-center shrink-0"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        title={text}
+        className="p-0.5 text-zinc-400 hover:text-[#00c8d2] transition-colors rounded-full cursor-help inline-flex items-center justify-center focus:outline-none"
+        aria-label="Info"
+      >
+        <Info className="w-3.5 h-3.5" />
+      </button>
+
+      {/* Floating Hover Tooltip */}
+      <div
+        className={`pointer-events-none absolute ${posClass} ${alignClass} hidden group-hover/note:block group-focus-within/note:block z-50 w-56 max-w-[240px]`}
+      >
+        <div className="bg-[#222226] text-zinc-200 border border-[#2a2a2e] rounded-md px-2.5 py-1.5 text-[11px] leading-relaxed shadow-2xl shadow-black/90 font-normal text-left">
+          {text}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const AutoCaptionModal: React.FC = () => {
   const { t } = useTranslation();
   const [leftTab, setLeftTab] = useState<"media" | "text" | "captions">(
@@ -161,20 +204,10 @@ export const AutoCaptionModal: React.FC = () => {
     time: 0,
   });
 
-  const transcriptionEngine = usePreditConfigStore(
-    (s) => s.transcriptionEngine
-  );
-  const localWhisperModel = usePreditConfigStore((s) => s.localWhisperModel);
   const captionTrackMode = usePreditConfigStore((s) => s.captionTrackMode);
   const groqApiKey = usePreditConfigStore((s) => s.groqApiKey);
   const sidecarRamStatus = usePreditConfigStore((s) => s.sidecarRamStatus);
 
-  const setTranscriptionEngine = usePreditConfigStore(
-    (s) => s.setTranscriptionEngine
-  );
-  const setLocalWhisperModel = usePreditConfigStore(
-    (s) => s.setLocalWhisperModel
-  );
   const setCaptionTrackMode = usePreditConfigStore(
     (s) => s.setCaptionTrackMode
   );
@@ -432,6 +465,20 @@ export const AutoCaptionModal: React.FC = () => {
   };
 
   const handleGenerateCaptions = async () => {
+    // If a clip is explicitly selected on the timeline, prioritize it
+    let targetClip: VideoClip | any = null;
+    if (selectedClip) {
+      if (selectedClip.trackType === "video") {
+        targetClip = videoTracks
+          .find((tr) => tr.id === selectedClip.trackId)
+          ?.clips.find((c) => c.id === selectedClip.clipId);
+      } else if (selectedClip.trackType === "audio") {
+        targetClip = audioTracks
+          .find((tr) => tr.id === selectedClip.trackId)
+          ?.clips.find((c) => c.id === selectedClip.clipId);
+      }
+    }
+
     const primaryVideoClip = videoTracks
       .flatMap((t) => t.clips)
       .find(
@@ -450,6 +497,7 @@ export const AutoCaptionModal: React.FC = () => {
       );
 
     const sourceClip =
+      targetClip ||
       primaryVideoClip ||
       primaryAudioClip ||
       videoTracks[0]?.clips[0] ||
@@ -468,19 +516,16 @@ export const AutoCaptionModal: React.FC = () => {
       setStatusMessage(t("aiCaptions.statusExtracting"));
       const audioPath = await extractAudioViaFfmpegSidecar(
         sourceMedia,
-        transcriptionEngine
+        "local_whisper"
       );
 
-      // Step 2: Transcribe with Local Whisper sidecar (with post-exit RAM purge) OR Groq Cloud
+      // Step 2: Transcribe with Local Whisper sidecar (with post-exit RAM purge)
       setStatusMessage(t("aiCaptions.statusTranscribing"));
-      const words =
-        transcriptionEngine === "local_whisper"
-          ? await transcribeWithLocalWhisperSidecar(
-              audioPath,
-              localWhisperModel,
-              (ram) => setSidecarRamStatus(ram)
-            )
-          : await transcribeWithGroqCloudWhisper(audioPath, groqApiKey);
+      const words = await transcribeWithLocalWhisperSidecar(
+        audioPath,
+        "ggml-base.bin",
+        (ram) => setSidecarRamStatus(ram)
+      );
 
       if (!words || words.length === 0) {
         throw new Error("No speech detected in this media.");
@@ -493,6 +538,9 @@ export const AutoCaptionModal: React.FC = () => {
 
       // Step 4: Translation (ONLY invoked when Bilingual mode is selected)
       if (captionTrackMode === "bilingual") {
+        if (!groqApiKey || !groqApiKey.trim()) {
+          throw new Error("Please enter your Groq API key to translate bilingual captions (or switch to Monolingual).");
+        }
         setStatusMessage(t("aiCaptions.statusTranslating", { current: 1, total: 1 }));
         captionPairs = await translateSegmentsBilingual(
           chunkedSegments,
@@ -500,6 +548,16 @@ export const AutoCaptionModal: React.FC = () => {
           (current, total) => {
             setStatusMessage(
               t("aiCaptions.statusTranslating", { current, total })
+            );
+          },
+          (secondsLeft, current, total, model) => {
+            setStatusMessage(
+              t("aiCaptions.statusRateLimitPending", {
+                seconds: secondsLeft,
+                current,
+                total,
+                model: model ? ` (${model})` : "",
+              })
             );
           }
         );
@@ -818,97 +876,72 @@ export const AutoCaptionModal: React.FC = () => {
         {leftTab === "captions" && (
           <div className="flex-1 p-3.5 flex flex-col justify-between text-xs overflow-y-auto">
             <div className="space-y-3">
-              <div>
+              <div className="flex items-center gap-1.5">
                 <h4 className="font-semibold text-zinc-100 text-sm">
                   {t("aiCaptions.title")}
                 </h4>
-                <p className="text-zinc-400 text-xs mt-0.5">
-                  {t("mediaBin.cardDesc")}
-                </p>
+                <NoteTooltip text={t("mediaBin.cardDesc")} position="bottom" />
               </div>
 
               {/* Output Track Mode */}
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <label className="block text-zinc-400">
                   {t("aiCaptions.trackModeLabel")}
                 </label>
-                <select
-                  value={captionTrackMode}
-                  onChange={(e) =>
-                    setCaptionTrackMode(e.target.value as CaptionTrackMode)
-                  }
-                  className="w-full bg-[#27272c] border border-[#2a2a2e] rounded px-2.5 py-1.5 text-zinc-200"
-                >
-                  <option value="bilingual">
-                    {t("aiCaptions.modeBilingual")}
-                  </option>
-                  <option value="monolingual">
-                    {t("aiCaptions.modeMonolingual")}
-                  </option>
-                </select>
-              </div>
-
-              {/* Engine Toggle: Local Whisper vs Groq Cloud Whisper */}
-              <div className="space-y-1.5">
-                <label className="block text-zinc-400">
-                  {t("aiCaptions.engineLabel")}
-                </label>
-                <div
-                  onClick={() =>
-                    setTranscriptionEngine(
-                      "local_whisper" as TranscriptionEngine
-                    )
-                  }
-                  className={`p-2.5 rounded cursor-pointer flex items-center justify-between border ${
-                    transcriptionEngine === "local_whisper"
-                      ? "bg-[#27272c] border-[#00c8d2]"
-                      : "bg-[#222226] border-[#2a2a2e]"
-                  }`}
-                >
-                  <div>
-                    <div className="font-medium text-zinc-100">
-                      {t("aiCaptions.engineLocal")}
+                <div className="grid grid-cols-2 gap-2">
+                  <div
+                    onClick={() => setCaptionTrackMode("bilingual")}
+                    className={`px-2.5 py-2 rounded cursor-pointer flex items-center justify-between border transition ${
+                      captionTrackMode === "bilingual"
+                        ? "bg-[#27272c] border-[#00c8d2] text-zinc-100"
+                        : "bg-[#222226] border-[#2a2a2e] text-zinc-300 hover:border-zinc-600"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-medium truncate">
+                        {t("aiCaptions.modeBilingualName")}
+                      </span>
+                      <NoteTooltip text={t("aiCaptions.bilingualDesc")} />
                     </div>
-                    <div className="text-zinc-400 text-xs">
-                      {t("aiCaptions.localDesc")}
-                    </div>
+                    <span className="text-[#00d2dc] font-bold text-xs shrink-0">
+                      {captionTrackMode === "bilingual" ? "●" : "○"}
+                    </span>
                   </div>
-                  <span className="text-[#00d2dc] font-bold">
-                    {transcriptionEngine === "local_whisper" ? "●" : "○"}
-                  </span>
-                </div>
 
-                <div
-                  onClick={() =>
-                    setTranscriptionEngine("groq_cloud" as TranscriptionEngine)
-                  }
-                  className={`p-2.5 rounded cursor-pointer flex items-center justify-between border ${
-                    transcriptionEngine === "groq_cloud"
-                      ? "bg-[#27272c] border-[#00c8d2]"
-                      : "bg-[#222226] border-[#2a2a2e]"
-                  }`}
-                >
-                  <div>
-                    <div className="font-medium text-zinc-100">
-                      {t("aiCaptions.engineCloud")}
+                  <div
+                    onClick={() => setCaptionTrackMode("monolingual")}
+                    className={`px-2.5 py-2 rounded cursor-pointer flex items-center justify-between border transition ${
+                      captionTrackMode === "monolingual"
+                        ? "bg-[#27272c] border-[#00c8d2] text-zinc-100"
+                        : "bg-[#222226] border-[#2a2a2e] text-zinc-300 hover:border-zinc-600"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-medium truncate">
+                        {t("aiCaptions.modeMonolingualName")}
+                      </span>
+                      <NoteTooltip
+                        text={t("aiCaptions.monolingualDesc")}
+                        align="right"
+                      />
                     </div>
-                    <div className="text-zinc-400 text-xs">
-                      {t("aiCaptions.cloudDesc")}
-                    </div>
+                    <span className="text-[#00d2dc] font-bold text-xs shrink-0">
+                      {captionTrackMode === "monolingual" ? "●" : "○"}
+                    </span>
                   </div>
-                  <span className="text-[#00d2dc] font-bold">
-                    {transcriptionEngine === "groq_cloud" ? "●" : "○"}
-                  </span>
                 </div>
               </div>
 
-              {/* Groq API Key Input when Cloud engine is selected */}
-              {transcriptionEngine === "groq_cloud" && (
+              {/* In Bilingual mode, allow user to input Groq API Key for EN <-> VI translation */}
+              {captionTrackMode === "bilingual" && (
                 <div className="space-y-1.5 p-2.5 rounded bg-[#222226] border border-[#2a2a2e]">
                   <div className="flex items-center justify-between">
-                    <label className="text-zinc-300 font-medium text-[11px]">
-                      Groq API Key (Free)
-                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-zinc-300 font-medium text-[11px]">
+                        Groq API Key
+                      </label>
+                      <NoteTooltip text={t("aiCaptions.groqKeyDesc")} />
+                    </div>
                     <a
                       href="https://console.groq.com/keys"
                       target="_blank"
@@ -925,50 +958,6 @@ export const AutoCaptionModal: React.FC = () => {
                     onChange={(e) => setGroqApiKey(e.target.value)}
                     className="w-full bg-[#27272c] border border-[#2a2a2e] rounded px-2.5 py-1.5 text-zinc-100 font-mono text-xs focus:outline-none focus:border-[#00c8d2]"
                   />
-                  <p className="text-[10px] text-zinc-500 leading-normal">
-                    Free instant transcription with whisper-large-v3-turbo (1-2s response, no model download).
-                  </p>
-                </div>
-              )}
-
-              {/* Local GGML Model Selector & Setup Info */}
-              {transcriptionEngine === "local_whisper" && (
-                <div className="space-y-2">
-                  <div className="space-y-1">
-                    <label className="block text-zinc-400">
-                      {t("aiCaptions.modelLabel")}
-                    </label>
-                    <select
-                      value={localWhisperModel}
-                      onChange={(e) =>
-                        setLocalWhisperModel(e.target.value as LocalWhisperModel)
-                      }
-                      className="w-full bg-[#27272c] border border-[#2a2a2e] rounded px-2.5 py-1.5 text-zinc-200"
-                    >
-                      <option value="ggml-base.bin">
-                        ggml-base.bin (140 MB — Fast & balanced)
-                      </option>
-                      <option value="ggml-tiny.bin">
-                        ggml-tiny.bin (75 MB — Ultra lightweight)
-                      </option>
-                      <option value="ggml-small.bin">
-                        ggml-small.bin (480 MB)
-                      </option>
-                      <option value="ggml-large-v3-turbo-q5_0.bin">
-                        ggml-large-v3-turbo-q5_0.bin (1.1 GB — High accuracy)
-                      </option>
-                    </select>
-                  </div>
-
-                  <div className="p-2 rounded bg-[#222226] border border-[#2a2a2e] text-[10px] text-zinc-400 space-y-1">
-                    <div className="text-amber-400 font-medium">⚡ Local Setup Requirement:</div>
-                    <div className="leading-relaxed">
-                      Requires <span className="font-mono text-zinc-200">{localWhisperModel}</span> in <span className="font-mono text-zinc-200">src-tauri/resources/models/</span>.
-                    </div>
-                    <div className="text-zinc-500">
-                      To download automatically: <code className="text-[#00c8d2]">powershell scripts/setup_whisper_local.ps1</code>
-                    </div>
-                  </div>
                 </div>
               )}
 

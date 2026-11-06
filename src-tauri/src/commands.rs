@@ -36,3 +36,9 @@ pub fn write_binary_file(path: String, data: Vec<u8>) -> Result<String, String> 
 pub fn read_text_file_safe(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
+
+/// Checks if a file exists on disk
+#[tauri::command]
+pub fn check_file_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
+}

@@ -1,8 +1,5 @@
 # Predit - Local Whisper Setup Script
-# Downloads whisper-cli Windows x64 binary and GGML Whisper model
-param(
-    [string]$Model = "base"
-)
+# Downloads whisper-cli Windows x64 binary and ggml-base.bin (140 MB) model
 
 $ErrorActionPreference = "Stop"
 
@@ -84,26 +81,28 @@ try {
     Write-Warning "Download of whisper-cli failed: $($_.Exception.Message)"
 }
 
-# 2. Download GGML Model
-$modelMap = @{
-    "tiny" = @{ file = "ggml-tiny.bin"; url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin" }
-    "base" = @{ file = "ggml-base.bin"; url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" }
-    "small" = @{ file = "ggml-small.bin"; url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin" }
-    "large-v3-turbo" = @{ file = "ggml-large-v3-turbo-q5_0.bin"; url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin" }
-}
-
-$selected = $modelMap[$Model]
-if (-not $selected) {
-    $selected = $modelMap["base"]
-}
-
-$modelDest = Join-Path $modelDir $selected.file
-Write-Host "[2/2] Downloading $($selected.file)..." -ForegroundColor Yellow
+# 2. Download GGML Model (ggml-base.bin 140 MB)
+$modelFileName = "ggml-base.bin"
+$modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
+$modelDest = Join-Path $modelDir $modelFileName
+Write-Host "[2/2] Downloading $modelFileName (140 MB)..." -ForegroundColor Yellow
 
 try {
-    Write-Host "Source: $($selected.url)" -ForegroundColor Gray
-    Invoke-WebRequest -Uri $selected.url -OutFile $modelDest -UseBasicParsing
-    Write-Host "[OK] Successfully downloaded $($selected.file) to: $modelDest" -ForegroundColor Green
+    Write-Host "Source: $modelUrl" -ForegroundColor Gray
+    Invoke-WebRequest -Uri $modelUrl -OutFile $modelDest -UseBasicParsing
+    Write-Host "[OK] Successfully downloaded $modelFileName to: $modelDest" -ForegroundColor Green
+
+    # Mirror model to target/debug and target/release resource paths
+    $targetModelDirs = @(
+        Join-Path $root "src-tauri\target\debug\resources\models",
+        Join-Path $root "src-tauri\target\release\resources\models"
+    )
+    foreach ($tmd in $targetModelDirs) {
+        if (-not (Test-Path $tmd)) {
+            New-Item -ItemType Directory -Path $tmd -Force | Out-Null
+        }
+        Copy-Item -Path $modelDest -Destination (Join-Path $tmd $modelFileName) -Force
+    }
 } catch {
     Write-Warning "Model download failed: $($_.Exception.Message)"
 }

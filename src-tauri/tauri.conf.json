@@ -33,7 +33,7 @@
     "targets": "all",
     "resources": [
       "resources/fonts/*",
-      "resources/models/*"
+      "resources/models/ggml-base.bin"
     ],
     "externalBin": [
       "binaries/ffmpeg",

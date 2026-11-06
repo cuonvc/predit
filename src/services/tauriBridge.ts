@@ -26,8 +26,11 @@ export async function extractAudioViaFfmpegSidecar(
     return inputVideoPath;
   }
 
+  const timestamp = Date.now();
   const filename =
-    mode === "local_whisper" ? "temp_audio_16k.wav" : "temp_audio_64k.mp3";
+    mode === "local_whisper"
+      ? `temp_audio_16k_${timestamp}.wav`
+      : `temp_audio_64k_${timestamp}.mp3`;
   let outputPath = filename;
 
   if (isTauriRuntime()) {
@@ -65,7 +68,7 @@ export async function extractAudioViaFfmpegSidecar(
 
 export async function transcribeWithLocalWhisperSidecar(
   wavPath: string,
-  modelFileName: string,
+  modelFileName: string = "ggml-base.bin",
   onRamStateChange?: (state: "active" | "purged") => void
 ): Promise<WordTimestamp[]> {
   onRamStateChange?.("active");
@@ -81,10 +84,44 @@ export async function transcribeWithLocalWhisperSidecar(
         // Fall back to relative path if resolveResource is unavailable
       }
 
+      // Check candidate paths and verify model exists before launching sidecar
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const candidatePaths = [
+          modelPath,
+          `src-tauri/resources/models/${modelFileName}`,
+          `resources/models/${modelFileName}`,
+          `src-tauri/target/debug/resources/models/${modelFileName}`,
+          `src-tauri/target/release/resources/models/${modelFileName}`,
+        ];
+        let found = false;
+        for (const candidate of candidatePaths) {
+          const doesExist = await invoke<boolean>("check_file_exists", {
+            path: candidate,
+          }).catch(() => false);
+          if (doesExist) {
+            modelPath = candidate;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          throw new Error(
+            `Local Whisper model '${modelFileName}' (140 MB) is missing. Please run: powershell scripts/setup_whisper_local.ps1`
+          );
+        }
+      } catch (checkErr: any) {
+        if (checkErr.message?.includes("not downloaded yet")) {
+          throw checkErr;
+        }
+      }
+
       const outputJsonPrefix = wavPath.replace(/\.[^/.]+$/, "");
       const cmd = Command.sidecar("binaries/whisper-cli", [
         "-m",
         modelPath,
+        "-l",
+        "auto",
         "-oj",
         "-of",
         outputJsonPrefix,
@@ -92,6 +129,21 @@ export async function transcribeWithLocalWhisperSidecar(
         wavPath,
       ]);
       const output = await cmd.execute();
+
+      if (output.code !== 0) {
+        const stderrOutput = output.stderr?.trim() || "";
+        const stdoutOutput = output.stdout?.trim() || "";
+        const detail =
+          stderrOutput || stdoutOutput || `Exit code ${output.code}`;
+        console.error("Local Whisper execution failed:", {
+          code: output.code,
+          stderr: stderrOutput,
+          stdout: stdoutOutput,
+          modelPath,
+          wavPath,
+        });
+        throw new Error(`Whisper execution error (${detail})`);
+      }
 
       // 1. First, check if whisper-cli wrote JSON to disk (${outputJsonPrefix}.json or ${wavPath}.json)
       const possibleJsonPaths = [
