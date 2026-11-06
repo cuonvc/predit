@@ -274,20 +274,7 @@ const initialVideoTracks: VideoTrack[] = [
   {
     id: "track_vid_1",
     nameKey: "tracks.mainVideo",
-    clips: [
-      {
-        id: "clip_v1",
-        sourceFile: "C:/Videos/raw_speaking_01.mp4",
-        sourceStart: 0,
-        sourceEnd: 32.5,
-        startTime: 0,
-        endTime: 32.5,
-        playbackRate: 1.0,
-        volume: 1.0,
-        muted: false,
-        mediaKind: "video",
-      },
-    ],
+    clips: [],
   },
   {
     id: "track_vid_overlay",
@@ -301,19 +288,7 @@ const initialAudioTracks: AudioTrack[] = [
   {
     id: "track_aud_1",
     nameKey: "tracks.bgm",
-    clips: [
-      {
-        id: "clip_a1",
-        sourceFile: "C:/Music/acoustic_background.mp3",
-        sourceStart: 0,
-        sourceEnd: 32.5,
-        startTime: 0,
-        endTime: 32.5,
-        volume: 0.15,
-        fadeIn: 1.0,
-        fadeOut: 2.0,
-      },
-    ],
+    clips: [],
   },
 ];
 
@@ -325,16 +300,7 @@ const initialTextTracks: TextTrack[] = [
     visible: true,
     locked: false,
     stylePreset: DEFAULT_MANUAL_STYLE,
-    clips: [
-      {
-        id: "clip_t_title",
-        linkedGroupId: null,
-        startTime: 0.5,
-        endTime: 4.5,
-        text: "Predit Bilingual AI Editor",
-        overrideStyle: null,
-      },
-    ],
+    clips: [],
   },
   {
     id: "track_text_en",
@@ -343,24 +309,7 @@ const initialTextTracks: TextTrack[] = [
     visible: true,
     locked: false,
     stylePreset: DEFAULT_EN_CAPTION_STYLE,
-    clips: [
-      {
-        id: "clip_en_1",
-        linkedGroupId: "pair_1",
-        startTime: 1.0,
-        endTime: 4.2,
-        text: "Welcome to Predit, your modern video editor.",
-        overrideStyle: null,
-      },
-      {
-        id: "clip_en_2",
-        linkedGroupId: "pair_2",
-        startTime: 4.5,
-        endTime: 8.8,
-        text: "Create bilingual subtitles in just one click.",
-        overrideStyle: null,
-      },
-    ],
+    clips: [],
   },
   {
     id: "track_text_vi",
@@ -369,24 +318,7 @@ const initialTextTracks: TextTrack[] = [
     visible: true,
     locked: false,
     stylePreset: DEFAULT_VI_CAPTION_STYLE,
-    clips: [
-      {
-        id: "clip_vi_1",
-        linkedGroupId: "pair_1",
-        startTime: 1.0,
-        endTime: 4.2,
-        text: "Chào mừng bạn đến với Predit, trình biên tập video hiện đại.",
-        overrideStyle: null,
-      },
-      {
-        id: "clip_vi_2",
-        linkedGroupId: "pair_2",
-        startTime: 4.5,
-        endTime: 8.8,
-        text: "Tạo phụ đề song ngữ chỉ với một cú nhấp chuột.",
-        overrideStyle: null,
-      },
-    ],
+    clips: [],
   },
 ];
 
@@ -485,7 +417,7 @@ export const useTimelineStore = create<TimelineState>()(
     (set, get) => ({
       project: {
         id: "predit_proj_2026",
-        name: "0401_Daily_Speaking_Vlog",
+        name: "Untitled_Project",
         aspectRatio: "16:9",
         resolution: { width: 1920, height: 1080 },
         fps: 30,
@@ -1452,8 +1384,7 @@ export const useTimelineStore = create<TimelineState>()(
             targetTrack &&
             targetTrack.clips.length === 1 &&
             (targetTrack.clips[0].id === "clip_a1" ||
-              targetTrack.clips[0].id === "clip_a_sample" ||
-              targetTrack.clips[0].sourceFile === "C:/Music/acoustic_background.mp3");
+              targetTrack.clips[0].id === "clip_a_sample");
 
           if (isTargetPlaceholder) {
             return {

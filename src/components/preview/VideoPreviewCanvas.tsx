@@ -142,11 +142,7 @@ const AudioClipPlayer: React.FC<{
 
   useEffect(() => {
     const srcFile = clip.sourceFile;
-    if (
-      !srcFile ||
-      srcFile === "C:/Music/acoustic_background.mp3" ||
-      srcFile === "sample_bgm.mp3"
-    ) {
+    if (!srcFile) {
       setResolvedSrc("");
       return;
     }
@@ -409,11 +405,7 @@ export const VideoPreviewCanvas: React.FC = () => {
   // Resolve active video clip source URL
   useEffect(() => {
     const srcFile = activeVideoClip?.sourceFile;
-    if (
-      !srcFile ||
-      srcFile === "sample_speaker_en.mp4" ||
-      srcFile === "C:/Videos/raw_speaking_01.mp4"
-    ) {
+    if (!srcFile) {
       setResolvedVideoSrc("");
       return;
     }
@@ -643,9 +635,7 @@ export const VideoPreviewCanvas: React.FC = () => {
             <div className="absolute inset-0 bg-gradient-to-b from-slate-800/40 via-slate-900/30 to-black/85 pointer-events-none flex flex-col items-center justify-center gap-1.5 p-3 text-center">
               <span className="text-2xl text-zinc-600">🎬</span>
               <span className="text-xs text-zinc-400 font-medium">
-                {activeVideoClip?.sourceFile &&
-                activeVideoClip.sourceFile !== "sample_speaker_en.mp4" &&
-                activeVideoClip.sourceFile !== "C:/Videos/raw_speaking_01.mp4"
+                {activeVideoClip?.sourceFile
                   ? activeVideoClip.sourceFile
                       .replace(/\\/g, "/")
                       .split("/")

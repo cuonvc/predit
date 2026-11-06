@@ -320,7 +320,7 @@ The entire project file (`vlog_14.predit`), application preferences, and Undo/Re
   },
   "aiConfig": {
     "transcriptionEngine": "local_whisper",
-    "localWhisperModel": "ggml-large-v3-turbo-q5_0.bin",
+    "localWhisperModel": "ggml-base.bin",
     "translationModel": "llama-3.3-70b-versatile"
   },
   "tracks": {

@@ -35,7 +35,7 @@ const VideoMediaCard: React.FC<{
   const isPlaceholder =
     clip.id === "clip_v1" ||
     clip.id === "clip_v_sample" ||
-    clip.sourceFile === "C:/Videos/raw_speaking_01.mp4";
+    !clip.sourceFile;
 
   useEffect(() => {
     if (isPlaceholder) {
@@ -481,20 +481,10 @@ export const AutoCaptionModal: React.FC = () => {
 
     const primaryVideoClip = videoTracks
       .flatMap((t) => t.clips)
-      .find(
-        (c) =>
-          c.sourceFile &&
-          c.sourceFile !== "sample_speaker_en.mp4" &&
-          c.sourceFile !== "C:/Videos/raw_speaking_01.mp4"
-      );
+      .find((c) => Boolean(c.sourceFile));
     const primaryAudioClip = audioTracks
       .flatMap((t) => t.clips)
-      .find(
-        (c) =>
-          c.sourceFile &&
-          c.sourceFile !== "C:/Music/acoustic_background.mp3" &&
-          c.sourceFile !== "sample_bgm.mp3"
-      );
+      .find((c) => Boolean(c.sourceFile));
 
     const sourceClip =
       targetClip ||
