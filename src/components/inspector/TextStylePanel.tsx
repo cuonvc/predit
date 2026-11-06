@@ -247,7 +247,7 @@ function isPresetActive(preset: TextPresetStyleItem, style?: TextStylePreset): b
     (!preset.backgroundBox.enabled ||
       (preset.backgroundBox.color.toUpperCase() ===
         (style.backgroundBox?.color || "").toUpperCase()));
-  return colorMatches && strokeMatches && shadowMatches && bgMatches;
+  return colorMatches && strokeMatches && shadowMatches && bgMatches; 
 }
 
 export const TextStylePanel: React.FC = () => {
