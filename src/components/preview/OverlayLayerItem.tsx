@@ -8,7 +8,13 @@ export interface OverlayLayerItemProps {
   playheadTime: number;
   isPlaying: boolean;
   isSelected: boolean;
-  onStartDrag: (e: React.MouseEvent) => void;
+  livePosition?: { x: number; y: number };
+  liveScale?: number;
+  onStartDrag: (
+    e: React.MouseEvent,
+    handle?: "move" | "corner-tl" | "corner-tr" | "corner-bl" | "corner-br",
+    element?: HTMLElement | null
+  ) => void;
 }
 
 /** Renders an active image or PIP video overlay on the preview canvas */
@@ -17,10 +23,13 @@ export const OverlayLayerItem: React.FC<OverlayLayerItemProps> = ({
   playheadTime,
   isPlaying,
   isSelected,
+  livePosition,
+  liveScale,
   onStartDrag,
 }) => {
   const resolvedSrc = useResolvedMediaSrc(clip.sourceFile);
   const vidRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const vid = vidRef.current;
@@ -53,21 +62,23 @@ export const OverlayLayerItem: React.FC<OverlayLayerItemProps> = ({
     }
   }, [playheadTime, clip, isPlaying]);
 
-  const posX = clip.position?.x ?? 0.5;
-  const posY = clip.position?.y ?? 0.5;
-  const scale = clip.scale ?? 0.4;
+  const posX = livePosition?.x ?? clip.position?.x ?? 0.5;
+  const posY = livePosition?.y ?? clip.position?.y ?? 0.5;
+  const scale = liveScale ?? clip.scale ?? 0.4;
 
   return (
     <div
-      onMouseDown={onStartDrag}
+      ref={containerRef}
+      onMouseDown={(e) => onStartDrag(e, "move", containerRef.current)}
       onClick={(e) => e.stopPropagation()}
       style={{
-        top: `${Math.round(posY * 100)}%`,
-        left: `${Math.round(posX * 100)}%`,
-        width: `${Math.round(scale * 100)}%`,
+        top: `${(posY * 100).toFixed(2)}%`,
+        left: `${(posX * 100).toFixed(2)}%`,
+        width: `${(scale * 100).toFixed(2)}%`,
         transform: "translate(-50%, -50%)",
+        willChange: isSelected ? "top, left, width" : undefined,
       }}
-      className={`absolute z-15 cursor-move select-none rounded overflow-visible transition-shadow ${
+      className={`absolute z-15 cursor-move select-none rounded overflow-visible ${
         isSelected
           ? "ring-2 ring-[#00c8d2] shadow-lg"
           : "hover:ring-1 hover:ring-white/70"
@@ -92,10 +103,39 @@ export const OverlayLayerItem: React.FC<OverlayLayerItemProps> = ({
         ))}
       {isSelected && (
         <>
-          <span className="w-2 h-2 bg-[#00c8d2] border border-black absolute -top-1 -left-1 rounded-full" />
-          <span className="w-2 h-2 bg-[#00c8d2] border border-black absolute -top-1 -right-1 rounded-full" />
-          <span className="w-2 h-2 bg-[#00c8d2] border border-black absolute -bottom-1 -left-1 rounded-full" />
-          <span className="w-2 h-2 bg-[#00c8d2] border border-black absolute -bottom-1 -right-1 rounded-full" />
+          {/* 4 Interactive Corner Handles */}
+          <div
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onStartDrag(e, "corner-tl", containerRef.current);
+            }}
+            className="w-2.5 h-2.5 bg-[#00c8d2] border border-black absolute -top-1.5 -left-1.5 rounded-full cursor-nwse-resize z-30 hover:scale-125 transition-transform"
+            title="Resize Top-Left"
+          />
+          <div
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onStartDrag(e, "corner-tr", containerRef.current);
+            }}
+            className="w-2.5 h-2.5 bg-[#00c8d2] border border-black absolute -top-1.5 -right-1.5 rounded-full cursor-nesw-resize z-30 hover:scale-125 transition-transform"
+            title="Resize Top-Right"
+          />
+          <div
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onStartDrag(e, "corner-bl", containerRef.current);
+            }}
+            className="w-2.5 h-2.5 bg-[#00c8d2] border border-black absolute -bottom-1.5 -left-1.5 rounded-full cursor-nesw-resize z-30 hover:scale-125 transition-transform"
+            title="Resize Bottom-Left"
+          />
+          <div
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onStartDrag(e, "corner-br", containerRef.current);
+            }}
+            className="w-2.5 h-2.5 bg-[#00c8d2] border border-black absolute -bottom-1.5 -right-1.5 rounded-full cursor-nwse-resize z-30 hover:scale-125 transition-transform"
+            title="Resize Bottom-Right"
+          />
         </>
       )}
     </div>
