@@ -192,8 +192,16 @@ pub fn render_timeline_view(
         ));
     }
 
-    // 2. V2 • Overlays (Image / Video) Tracks (Rendered ABOVE V1 Main Video)
+    // 2. V2+ • Overlays (Image / Video) Tracks (Rendered ABOVE V1 Main Video)
+    let overlay_total = state.video_tracks.iter().filter(|t| t.is_overlay).count();
+    let mut ov_idx = 0usize;
     for tr in state.video_tracks.iter().filter(|t| t.is_overlay) {
+        ov_idx += 1;
+        let display_name = if overlay_total > 1 {
+            format!("V{} • Overlays (Image / Video)", 1 + ov_idx)
+        } else {
+            "V2 • Overlays (Image / Video)".to_string()
+        };
         let clips = tr
             .clips
             .iter()
@@ -230,7 +238,7 @@ pub fn render_timeline_view(
             tr.id.clone(),
             TrackKind::Video,
             "🖼",
-            "V2 • Overlays (Image / Video)".to_string(),
+            display_name,
             true,
             32.0,
             clips,

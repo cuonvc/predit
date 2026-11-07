@@ -113,7 +113,12 @@ Instead of treating captions as a rigid, special-case subtitle layer, **manual t
 * **Aspect Ratio Presets:** `16:9` (`1920x1080`), `9:16` (`1080x1920`), `3:4` (`1080x1440`), and `1:1` (`1080x1080`).
 * **Background Fill Modes:** Solid black/color pad or blurred duplicate background layer (`boxblur` filter).
 
-### 4.5 Multi-Language UI Architecture (i18n: English & Vietnamese)
+### 4.5 Dynamic Layer Stacking & Overlay Jump Invariant (Timeline)
+* **Collision-Free Overlay Stacking:** When pulling or moving an overlay track/clip (video, image, or text) over another track or clip of the same format on the **Timeline** (`workspace_ui::timeline`):
+  * If the destination track or time span is occupied by another clip of the same kind, the moving clip automatically **jumps to another line (a higher layer track: `V2 -> V3+`, `Titles 1 -> Titles 2+`)**.
+  * Managed non-destructively through `promote_video_clip_to_higher_layer` and `promote_text_clip_to_higher_layer` in `editor_core::operations::clip_move_ops`, with dynamically indexed overlay tracks (`V2`, `V3`, etc.).
+
+### 4.6 Multi-Language UI Architecture (i18n: English & Vietnamese)
 
 Predit supports instant switching between **English (`en`)** and **Vietnamese (`vi`)** from the top navigation header (`[EN | VI]`) or Preferences modal.
 

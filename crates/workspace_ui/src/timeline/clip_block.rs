@@ -5,6 +5,9 @@ use crate::timeline::{
 use crate::workspace::PreditWorkspace;
 use editor_core::helpers::round3;
 use editor_core::models::{SelectedClip, TrackKind, TransitionType};
+use editor_core::operations::{
+    promote_text_clip_to_higher_layer, promote_video_clip_to_higher_layer,
+};
 use gpui::{
     Context, IntoElement, MouseButton, MouseDownEvent, Rgba, SharedString, div, prelude::*, px,
     rgb, rgba,
@@ -84,6 +87,9 @@ pub fn render_clip_block(
     let ghost_border = item.border_color;
     let ghost_text = item.text_color;
 
+    let target_tt = item.track_type;
+    let target_cid = item.clip_id.clone();
+
     div()
         .id(SharedString::from(format!("clip-wrap-{}", item.clip_id)))
         .absolute()
@@ -101,6 +107,42 @@ pub fn render_clip_block(
         .items_center()
         .justify_between()
         .overflow_hidden()
+        .drag_over::<TimelineDragInteraction>(|style, _, _, _| {
+            style
+                .border_2()
+                .border_color(CapCutTheme::accent())
+                .bg(CapCutTheme::parse_hex("#00c8d2", 0.25))
+        })
+        .on_drop(cx.listener(move |this, op: &TimelineDragInteraction, _, cx| {
+            if let TimelineDragInteraction::MoveClip {
+                track_type: src_type,
+                track_id: src_track_id,
+                clip_id: moving_cid,
+                initial_start,
+                ..
+            } = op
+            {
+                if *src_type == target_tt && moving_cid != &target_cid {
+                    let src_tid = src_track_id.clone();
+                    let cid = moving_cid.clone();
+                    let current_st = this
+                        .find_clip_start_time(target_tt, &src_tid, &cid)
+                        .unwrap_or(*initial_start);
+                    this.history.mutate(|s| {
+                        match target_tt {
+                            TrackKind::Video => {
+                                promote_video_clip_to_higher_layer(s, &src_tid, &cid, current_st);
+                            }
+                            TrackKind::Text => {
+                                promote_text_clip_to_higher_layer(s, &src_tid, &cid, current_st);
+                            }
+                            _ => {}
+                        }
+                    });
+                    cx.notify();
+                }
+            }
+        }))
         .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| {
             cx.stop_propagation();
         }))

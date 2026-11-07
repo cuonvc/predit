@@ -11,12 +11,12 @@ pub mod project;
 mod tests {
     use super::config::CaptionTrackMode;
     use super::history::TimelineHistory;
-    use super::models::{BilingualCaptionPair, TrackKind, TransitionType};
+    use super::models::{BilingualCaptionPair, MediaKind, TrackKind, TransitionType};
     use super::operations::{
-        add_manual_text_clip, cycle_clip_transition, delete_selected_clip, import_main_video_clip,
-        inject_bilingual_text_tracks, move_clip_to_track, set_clip_transition,
-        split_selected_clip_at_playhead, trim_left_at_playhead, trim_right_at_playhead,
-        update_clip_duration,
+        add_manual_text_clip, add_overlay_clip, cycle_clip_transition, delete_selected_clip,
+        import_main_video_clip, inject_bilingual_text_tracks, move_clip_to_track,
+        set_clip_transition, split_selected_clip_at_playhead, trim_left_at_playhead,
+        trim_right_at_playhead, update_clip_duration,
     };
 
     #[test]
@@ -141,6 +141,71 @@ mod tests {
                 .map(|t| (t.transition_type, t.duration)),
             Some((TransitionType::WipeLeft, 0.8))
         );
+    }
+
+    #[test]
+    fn test_pull_overlay_to_occupied_track_jumps_to_higher_layer() {
+        let mut history = TimelineHistory::default();
+        // Add overlay A at playhead 0.0s (0.0s to 5.0s)
+        history.mutate_transient(|s| s.playhead_time = 0.0);
+        history.mutate(|s| add_overlay_clip(s, "image_a.png", MediaKind::Image, 5.0));
+
+        // Add overlay B at playhead 10.0s (10.0s to 15.0s)
+        history.mutate_transient(|s| s.playhead_time = 10.0);
+        history.mutate(|s| add_overlay_clip(s, "video_b.mp4", MediaKind::Video, 5.0));
+
+        let tr_a_id = history.present.video_tracks.iter().find(|t| t.is_overlay).unwrap().id.clone();
+        let clip_b_id = history.present.video_tracks.iter().filter(|t| t.is_overlay)
+            .flat_map(|t| t.clips.iter())
+            .find(|c| c.source_file == "video_b.mp4")
+            .unwrap().id.clone();
+
+        // Pull overlay B to track A overlapping at 2.0s
+        history.mutate(|s| {
+            move_clip_to_track(s, TrackKind::Video, &tr_a_id, &tr_a_id, &clip_b_id, 2.0);
+        });
+
+        // Overlay B must jump to another line (layer higher)
+        let overlay_tracks: Vec<_> = history.present.video_tracks.iter().filter(|t| t.is_overlay).collect();
+        assert!(overlay_tracks.len() >= 2, "Expected overlay tracks to jump to higher layer, found {}", overlay_tracks.len());
+
+        let has_clip_b_in_higher = overlay_tracks.iter().any(|t| {
+            t.clips.iter().any(|c| c.id == clip_b_id && c.start_time == 2.0)
+        });
+        assert!(has_clip_b_in_higher, "Clip B must be placed at 2.0s in higher layer track");
+    }
+
+    #[test]
+    fn test_pull_text_overlay_to_occupied_track_jumps_to_higher_layer() {
+        let mut history = TimelineHistory::default();
+        history.mutate_transient(|s| s.playhead_time = 0.0);
+        history.mutate(|s| add_manual_text_clip(s, Some("Title A")));
+
+        let tr_a_id = history.present.text_tracks[0].id.clone();
+        let _clip_a_id = history.present.text_tracks[0].clips[0].id.clone();
+
+        history.mutate_transient(|s| s.playhead_time = 10.0);
+        history.mutate(|s| add_manual_text_clip(s, Some("Title B")));
+
+        let clip_b_id = history.present.text_tracks.iter()
+            .flat_map(|t| t.clips.iter())
+            .find(|c| c.text == "Title B")
+            .unwrap().id.clone();
+
+        // Pull Title B to overlap Title A at 1.0s
+        history.mutate(|s| {
+            move_clip_to_track(s, TrackKind::Text, &tr_a_id, &tr_a_id, &clip_b_id, 1.0);
+        });
+
+        let manual_tracks: Vec<_> = history.present.text_tracks.iter()
+            .filter(|t| t.role == super::models::TextTrackRole::ManualText)
+            .collect();
+        assert!(manual_tracks.len() >= 2, "Expected manual text tracks to jump to higher line");
+
+        let has_clip_b_in_higher = manual_tracks.iter().any(|t| {
+            t.clips.iter().any(|c| c.id == clip_b_id && c.start_time == 1.0)
+        });
+        assert!(has_clip_b_in_higher, "Title B must be placed at 1.0s in higher layer text track");
     }
 }
 

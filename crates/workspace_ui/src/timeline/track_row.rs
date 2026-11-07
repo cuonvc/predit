@@ -65,7 +65,7 @@ pub fn render_track_row(
                 ..
             } = op
             {
-                if *src_type == track_type && src_track_id != &tid_drop_clip {
+                if *src_type == track_type {
                     let target_tid = tid_drop_clip.clone();
                     let src_tid = src_track_id.clone();
                     let cid = clip_id.clone();
@@ -75,9 +75,6 @@ pub fn render_track_row(
                     this.history.mutate(|s| {
                         move_clip_to_track(s, track_type, &src_tid, &target_tid, &cid, current_st);
                     });
-                    cx.notify();
-                } else if *src_type == track_type && src_track_id == &tid_drop_clip {
-                    this.history.push_snapshot();
                     cx.notify();
                 }
             }

@@ -60,6 +60,11 @@ Always consult the detailed references when modifying core systems:
 ### 2.6 Documentation Synchronization Invariant (STRICT)
 * **Whenever any feature, schema, model configuration, pipeline behavior, UI workflow, or dependency changes in the codebase, all corresponding documentation files MUST be updated in the same turn.**
 
+### 2.7 Dynamic Layer Stacking & Overlay Jump Invariant (`timeline`)
+* When an overlay clip (video, image, or text) is pulled/dragged onto another track or clip of the same format on the **Timeline** (`crates/workspace_ui/src/timeline`):
+  * If the destination time span or target track is occupied by another clip of the same kind, the moving clip automatically **jumps to another line (a higher layer track: `V2 -> V3+`, `Titles 1 -> Titles 2+`)** via `promote_video_clip_to_higher_layer` or `promote_text_clip_to_higher_layer` in `crates/editor_core/src/operations/clip_move_ops.rs` rather than colliding on the same track line.
+  * Timeline rows dynamically label overlay tracks (`V2 • Overlays (Image / Video)`, `V3 • Overlays (Image / Video)`, etc.), maintaining clean non-destructive multi-layer composition.
+
 ---
 
 ## 3. Verification & Testing Procedure
