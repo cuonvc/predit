@@ -5,7 +5,9 @@ use crate::timeline::TimelineDragInteraction;
 use crate::workspace::PreditWorkspace;
 use editor_core::models::TrackKind;
 use editor_core::operations::move_clip_to_track;
-use gpui::{Context, ExternalPaths, IntoElement, SharedString, div, prelude::*, px, rgb};
+use gpui::{
+    Context, ExternalPaths, IntoElement, MouseButton, SharedString, div, prelude::*, px, rgb,
+};
 use ui_kit::CapCutTheme;
 
 pub fn render_track_row(
@@ -47,7 +49,13 @@ pub fn render_track_row(
             this.import_external_paths(paths.paths(), is_overlay);
             cx.notify();
         }))
-        // Accept clips dragged across tracks
+        // Accept clips dragged across tracks with floating visual feedback
+        .drag_over::<TimelineDragInteraction>(|style, _, _, _| {
+            style
+                .bg(CapCutTheme::parse_hex("#00c8d2", 0.18))
+                .border_1()
+                .border_color(CapCutTheme::accent())
+        })
         .on_drop(cx.listener(move |this, op: &TimelineDragInteraction, _, cx| {
             if let TimelineDragInteraction::MoveClip {
                 track_type: src_type,
@@ -61,10 +69,15 @@ pub fn render_track_row(
                     let target_tid = tid_drop_clip.clone();
                     let src_tid = src_track_id.clone();
                     let cid = clip_id.clone();
-                    let st = *initial_start;
-                    this.history.mutate_transient(|s| {
-                        move_clip_to_track(s, track_type, &src_tid, &target_tid, &cid, st);
+                    let current_st = this
+                        .find_clip_start_time(track_type, &src_tid, &cid)
+                        .unwrap_or(*initial_start);
+                    this.history.mutate(|s| {
+                        move_clip_to_track(s, track_type, &src_tid, &target_tid, &cid, current_st);
                     });
+                    cx.notify();
+                } else if *src_type == track_type && src_track_id == &tid_drop_clip {
+                    this.history.push_snapshot();
                     cx.notify();
                 }
             }
@@ -127,6 +140,20 @@ pub fn render_track_row(
                 .flex_1()
                 .h(px(row_height))
                 .rounded(px(4.0))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, window, cx| {
+                        if !this.focus_handle.is_focused(window) {
+                            window.focus(&this.focus_handle);
+                        }
+                        if this.history.present.selected_clip.is_some() {
+                            this.history.mutate_transient(|s| {
+                                s.selected_clip = None;
+                            });
+                            cx.notify();
+                        }
+                    }),
+                )
                 .children(
                     clips
                         .into_iter()

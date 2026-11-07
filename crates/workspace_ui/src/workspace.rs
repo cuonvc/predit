@@ -11,17 +11,18 @@ use crate::player::render_player_view;
 use crate::timeline::render_timeline_view;
 use crate::topbar::render_topbar;
 use editor_core::config::PreditConfig;
+use editor_core::helpers::{get_timeline_total_duration, round3};
 use editor_core::history::TimelineHistory;
 use editor_core::i18n::I18n;
-use editor_core::models::{BilingualCaptionPair, MediaKind};
+use editor_core::models::{BilingualCaptionPair, MediaKind, TrackKind};
 use editor_core::operations::{
     add_audio_clip, add_manual_text_clip, add_overlay_clip, delete_selected_clip,
     import_main_video_clip, inject_bilingual_text_tracks, split_selected_clip_at_playhead,
     trim_left_at_playhead, trim_right_at_playhead, update_clip_duration,
 };
 use gpui::{
-    Context, DragMoveEvent, Empty, FocusHandle, IntoElement, KeyDownEvent, Render, Window, div,
-    prelude::*, px, rgb, rgba,
+    Context, DragMoveEvent, Empty, FocusHandle, IntoElement, KeyDownEvent, Render, Task, Window,
+    div, prelude::*, px, rgb, rgba,
 };
 use media_engine::ass_compiler::compile_unified_ass_file;
 use media_engine::probe::classify_media_kind;
@@ -63,6 +64,7 @@ pub struct PreditWorkspace {
     pub ai_status_message: String,
     pub export_status_message: String,
     pub rate_limit_countdown_sec: u64,
+    pub playback_task: Option<Task<()>>,
 }
 
 impl PreditWorkspace {
@@ -137,6 +139,7 @@ impl PreditWorkspace {
             ai_status_message: "Ready: whisper-cli (ggml-base.bin) + Groq Batch 20".into(),
             export_status_message: "Ready to compile UTF-8 .ass & render MP4".into(),
             rate_limit_countdown_sec: 0,
+            playback_task: None,
         }
     }
 
@@ -144,10 +147,90 @@ impl PreditWorkspace {
         self.history.push_snapshot();
     }
 
-    pub fn toggle_playback(&mut self) {
+    pub fn toggle_playback(&mut self, cx: &mut Context<Self>) {
+        let was_playing = self.history.present.is_playing;
+        let next_playing = !was_playing;
         self.history.mutate_transient(|s| {
-            s.is_playing = !s.is_playing;
+            s.is_playing = next_playing;
         });
+
+        if next_playing {
+            let task = cx.spawn(|this: gpui::WeakEntity<Self>, cx: &mut gpui::AsyncApp| {
+                let mut async_cx = cx.clone();
+                async move {
+                    let interval = std::time::Duration::from_millis(33);
+                    loop {
+                        async_cx.background_executor().timer(interval).await;
+                        let active = this
+                            .update(&mut async_cx, |this, cx| {
+                                if !this.history.present.is_playing {
+                                    return false;
+                                }
+                                let total_dur = get_timeline_total_duration(
+                                    &this.history.present.video_tracks,
+                                    &this.history.present.audio_tracks,
+                                    &this.history.present.text_tracks,
+                                )
+                                .max(1.0);
+
+                                let next_time = this.history.present.playhead_time + 0.033;
+                                if next_time >= total_dur {
+                                    this.history.mutate_transient(|s| {
+                                        s.is_playing = false;
+                                        s.playhead_time = total_dur;
+                                    });
+                                    cx.notify();
+                                    false
+                                } else {
+                                    this.history.mutate_transient(|s| {
+                                        s.playhead_time = round3(next_time);
+                                    });
+                                    cx.notify();
+                                    true
+                                }
+                            })
+                            .unwrap_or(false);
+
+                        if !active {
+                            break;
+                        }
+                    }
+                }
+            });
+            self.playback_task = Some(task);
+        } else {
+            self.playback_task = None;
+        }
+        cx.notify();
+    }
+
+    pub fn find_clip_start_time(
+        &self,
+        track_type: TrackKind,
+        track_id: &str,
+        clip_id: &str,
+    ) -> Option<f64> {
+        let state = &self.history.present;
+        match track_type {
+            TrackKind::Text => state
+                .text_tracks
+                .iter()
+                .find(|t| t.id == track_id)
+                .and_then(|t| t.clips.iter().find(|c| c.id == clip_id))
+                .map(|c| c.start_time),
+            TrackKind::Video => state
+                .video_tracks
+                .iter()
+                .find(|t| t.id == track_id)
+                .and_then(|t| t.clips.iter().find(|c| c.id == clip_id))
+                .map(|c| c.start_time),
+            TrackKind::Audio => state
+                .audio_tracks
+                .iter()
+                .find(|t| t.id == track_id)
+                .and_then(|t| t.clips.iter().find(|c| c.id == clip_id))
+                .map(|c| c.start_time),
+        }
     }
 
     /// Deletes either the currently selected Media Bin item (if focused in Left Sidebar)
@@ -336,6 +419,33 @@ impl Render for PreditWorkspace {
             ))
             .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
                 let key = ev.keystroke.key.as_str();
+                if key.eq_ignore_ascii_case("space") || key == " " {
+                    this.toggle_playback(cx);
+                    return;
+                }
+                if ev.keystroke.modifiers.control || ev.keystroke.modifiers.platform {
+                    if key == "=" || key == "+" {
+                        this.timeline_zoom_px_per_sec =
+                            (this.timeline_zoom_px_per_sec * 1.2).clamp(4.0, 120.0);
+                        cx.notify();
+                        return;
+                    } else if key == "-" {
+                        this.timeline_zoom_px_per_sec =
+                            (this.timeline_zoom_px_per_sec / 1.2).clamp(4.0, 120.0);
+                        cx.notify();
+                        return;
+                    } else if key == "0" {
+                        let total_dur = get_timeline_total_duration(
+                            &this.history.present.video_tracks,
+                            &this.history.present.audio_tracks,
+                            &this.history.present.text_tracks,
+                        )
+                        .max(10.0) as f32;
+                        this.timeline_zoom_px_per_sec = (840.0 / total_dur).clamp(8.0, 120.0);
+                        cx.notify();
+                        return;
+                    }
+                }
                 if key.eq_ignore_ascii_case("delete") || key.eq_ignore_ascii_case("backspace") {
                     this.delete_selected_item();
                     cx.notify();
@@ -343,8 +453,7 @@ impl Render for PreditWorkspace {
             }))
             // Global keyboard action listeners
             .on_action(cx.listener(|this, _: &TogglePlay, _, cx| {
-                this.toggle_playback();
-                cx.notify();
+                this.toggle_playback(cx);
             }))
             .on_action(cx.listener(|this, _: &SplitAtPlayhead, _, cx| {
                 this.history.mutate(split_selected_clip_at_playhead);

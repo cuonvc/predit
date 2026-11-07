@@ -107,8 +107,7 @@ pub fn render_player_view(
                                 .hover(|s| s.text_color(rgb(0xffffff)))
                                 .cursor_pointer()
                                 .on_click(cx.listener(|this, _, _, cx| {
-                                    this.toggle_playback();
-                                    cx.notify();
+                                    this.toggle_playback(cx);
                                 }))
                                 .child(if is_playing { "⏸" } else { "▶" }),
                         ),

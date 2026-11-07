@@ -1,6 +1,6 @@
 use crate::inspector::InspectorTab;
 use crate::timeline::{
-    TRACK_LANE_LEFT_OFFSET, TimelineDragInteraction, TimelineInteractionGhost,
+    DraggedClipGhost, TRACK_LANE_LEFT_OFFSET, TimelineDragInteraction, TimelineInteractionGhost,
 };
 use crate::workspace::PreditWorkspace;
 use editor_core::helpers::round3;
@@ -79,6 +79,11 @@ pub fn render_clip_block(
         item.border_color
     };
 
+    let ghost_label = item.label.clone();
+    let ghost_bg = item.bg_color;
+    let ghost_border = item.border_color;
+    let ghost_text = item.text_color;
+
     div()
         .id(SharedString::from(format!("clip-wrap-{}", item.clip_id)))
         .absolute()
@@ -96,6 +101,9 @@ pub fn render_clip_block(
         .items_center()
         .justify_between()
         .overflow_hidden()
+        .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| {
+            cx.stop_propagation();
+        }))
         // 1. Left Edge Resize Handle (w-3 pl-0.5 with rounded pill w-1 h-3/5 bg-white/30 -> group-hover:bg-[#00c8d2])
         .child(
             div()
@@ -142,7 +150,11 @@ pub fn render_clip_block(
                 .cursor_grab()
                 .on_mouse_down(
                     MouseButton::Left,
-                    cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
+                    cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
+                        cx.stop_propagation();
+                        if !this.focus_handle.is_focused(window) {
+                            window.focus(&this.focus_handle);
+                        }
                         let next_sel = sel.clone();
                         let lane_x =
                             ((ev.position.x / px(1.0)) - TRACK_LANE_LEFT_OFFSET).max(0.0);
@@ -161,8 +173,13 @@ pub fn render_clip_block(
                         cx.notify();
                     }),
                 )
-                .on_drag(move_drag, |_, _, _, cx| {
-                    cx.new(|_| TimelineInteractionGhost)
+                .on_drag(move_drag, move |_, _, _, cx| {
+                    cx.new(|_| DraggedClipGhost {
+                        label: ghost_label.clone(),
+                        bg_color: ghost_bg,
+                        border_color: ghost_border,
+                        text_color: ghost_text,
+                    })
                 })
                 .child(
                     div()

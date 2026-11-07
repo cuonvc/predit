@@ -11,8 +11,8 @@ use editor_core::operations::{
     trim_left_at_playhead, trim_right_at_playhead, update_clip_duration,
 };
 use gpui::{
-    Context, DragMoveEvent, Empty, IntoElement, MouseButton, MouseDownEvent, Render, Window, div,
-    prelude::*, px, rgb, rgba,
+    Context, DragMoveEvent, Empty, IntoElement, MouseButton, MouseDownEvent, Render, Rgba,
+    ScrollDelta, ScrollWheelEvent, SharedString, Window, div, prelude::*, px, rgb, rgba,
 };
 use ui_kit::CapCutTheme;
 
@@ -52,6 +52,41 @@ pub struct TimelineInteractionGhost;
 impl Render for TimelineInteractionGhost {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         Empty
+    }
+}
+
+/// Floating visual ghost rendered under the cursor when dragging/moving a clip
+pub struct DraggedClipGhost {
+    pub label: String,
+    pub bg_color: Rgba,
+    pub border_color: Rgba,
+    pub text_color: Rgba,
+}
+
+impl Render for DraggedClipGhost {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px_3()
+            .py_1p5()
+            .rounded(px(4.0))
+            .bg(self.bg_color)
+            .border_2()
+            .border_color(CapCutTheme::accent())
+            .shadow_lg()
+            .opacity(0.88)
+            .flex()
+            .items_center()
+            .gap_1p5()
+            .text_xs()
+            .text_color(self.text_color)
+            .child(
+                div()
+                    .w(px(6.0))
+                    .h(px(6.0))
+                    .rounded_full()
+                    .bg(CapCutTheme::accent()),
+            )
+            .child(SharedString::from(self.label.clone()))
     }
 }
 
@@ -312,6 +347,21 @@ pub fn render_timeline_view(
         .flex()
         .flex_col()
         .justify_between()
+        // Elastic timeline horizontal zoom on Ctrl/Cmd + Mouse Wheel
+        .on_scroll_wheel(cx.listener(|this, ev: &ScrollWheelEvent, _, cx| {
+            if ev.modifiers.control || ev.modifiers.platform {
+                let delta_y = match ev.delta {
+                    ScrollDelta::Lines(p) => p.y,
+                    ScrollDelta::Pixels(p) => (p.y / px(20.0)).clamp(-5.0, 5.0),
+                };
+                if delta_y.abs() > 0.01 {
+                    let factor = if delta_y > 0.0 { 1.15 } else { 0.85 };
+                    let next = (this.timeline_zoom_px_per_sec * factor).clamp(4.0, 120.0);
+                    this.timeline_zoom_px_per_sec = (next * 10.0).round() / 10.0;
+                    cx.notify();
+                }
+            }
+        }))
         // Handle all real-time mouse-hold dragging (Playhead Scrub, Move Clip, Trim Left/Right) at millisecond precision
         .on_drag_move::<TimelineDragInteraction>(cx.listener(
             |this, ev: &DragMoveEvent<TimelineDragInteraction>, _, cx| {
@@ -724,6 +774,21 @@ pub fn render_timeline_view(
                 .flex_col()
                 .gap_1p5()
                 .overflow_y_scroll()
+                // Unfocus active clip when clicking anywhere on empty timeline area
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, window, cx| {
+                        if !this.focus_handle.is_focused(window) {
+                            window.focus(&this.focus_handle);
+                        }
+                        if this.history.present.selected_clip.is_some() {
+                            this.history.mutate_transient(|s| {
+                                s.selected_clip = None;
+                            });
+                            cx.notify();
+                        }
+                    }),
+                )
                 .child(ruler_playhead::render_ruler_and_playhead(
                     state.playhead_time,
                     total_dur,

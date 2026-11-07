@@ -75,3 +75,7 @@ Timeline clips follow muted video-editing conventions:
 * Right controls: `[✓] 🔗 Sync EN/VI Timing` checkbox, `⤢ Auto Fit` button, and `−` [cyan zoom slider] `+`
 * Continuous vertical `1px` cyan playhead line (`#00c8d2`) with `16x16` top cyan handle badge (`w-4 h-4 bg-[#00c8d2]`), supporting click-to-jump and drag-to-scrub at millisecond (`0.001s`) resolution
 * Seamless track lanes on `#0e0e10` with left track header width fixed at **`144px`** (`w-36`) and pill-shaped left/right clip trim handles (`w-1 h-3/5 rounded-full bg-white/30` -> `#00c8d2` on hover)
+* **Playback Loop & Space Key**: Space key and transport play button (`▶`/`⏸`) trigger async ~30fps loop advancing `playhead_time` and notifying GPUI views in real-time until total timeline duration is reached.
+* **Floating Clip Drag Effect**: Dragging a clip across lines renders a `DraggedClipGhost` floating badge with cyan outline, shadow, and clip metadata; target track lanes highlight on hover via `.drag_over` cyan tint.
+* **Elastic Zooming**: `Ctrl + Mouse Wheel` (and `Ctrl` + `+`/`-`/`0`) dynamically stretches or contracts timeline scale (`timeline_zoom_px_per_sec`).
+* **Timeline Unfocus**: Clicking anywhere on empty timeline stage or track lanes deselects active clips, returning the Inspector to its default prompt.
