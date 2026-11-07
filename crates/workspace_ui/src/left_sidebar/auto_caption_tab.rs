@@ -370,7 +370,7 @@ pub fn render_auto_caption_tab(
                         .text_color(rgb(0x091214))
                         .cursor_pointer()
                         .on_click(cx.listener(|this, _, _, cx| {
-                            this.generate_demo_or_whisper_captions();
+                            this.generate_ai_captions();
                             cx.notify();
                         }))
                         .child(if is_bilingual {

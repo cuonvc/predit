@@ -16,9 +16,9 @@ use editor_core::history::TimelineHistory;
 use editor_core::i18n::I18n;
 use editor_core::models::{BilingualCaptionPair, MediaKind, TrackKind};
 use editor_core::operations::{
-    add_audio_clip, add_manual_text_clip, add_overlay_clip, delete_selected_clip,
+    add_audio_clip, add_overlay_clip, delete_selected_clip,
     import_main_video_clip, inject_bilingual_text_tracks, split_selected_clip_at_playhead,
-    trim_left_at_playhead, trim_right_at_playhead, update_clip_duration,
+    trim_left_at_playhead, trim_right_at_playhead,
 };
 use gpui::{
     Context, DragMoveEvent, Empty, FocusHandle, IntoElement, KeyDownEvent, Render, Task, Window,
@@ -72,52 +72,10 @@ impl PreditWorkspace {
         let focus_handle = cx.focus_handle();
         window.focus(&focus_handle);
 
-        let mut history = TimelineHistory::default();
+        let history = TimelineHistory::default();
         let config = PreditConfig::load();
         let i18n = I18n::new();
-
-        // Populate initial workspace state matching the reference screenshot & HTML
-        history.mutate_transient(|s| {
-            import_main_video_clip(s, "1481d0b9-e7da-4f32-855e-9cffc1071d45", 34.6);
-            s.playhead_time = 0.23;
-            add_overlay_clip(
-                s,
-                "bc6ea2e3-25ae-4b71-a165-7b6c45c4f472",
-                MediaKind::Video,
-                12.83,
-            );
-
-            // Add 2 overlapping Default Title tracks (Titles & Overlays 1 and Titles & Overlays 2)
-            s.playhead_time = 5.79;
-            add_manual_text_clip(s, Some("Default Title"));
-            add_manual_text_clip(s, Some("Default Title"));
-            if let Some(second_manual) = s.text_tracks.get(1) {
-                let tid = second_manual.id.clone();
-                if let Some(cid) = second_manual.clips.first().map(|c| c.id.clone()) {
-                    update_clip_duration(s, editor_core::models::TrackKind::Text, &tid, &cid, 5.79, 31.54);
-                }
-            }
-
-            s.playhead_time = 12.10;
-            s.selected_clip = None;
-        });
-
-        let media_bin = vec![
-            ImportedMediaItem {
-                id: "media_1".into(),
-                path: "1481d0b9-e7da-4f32-855e-9cffc1071d45".into(),
-                name: "1481d0b9-e7da-4f32-855e-9cffc1071d45".into(),
-                duration: 55.0,
-                kind: MediaKind::Video,
-            },
-            ImportedMediaItem {
-                id: "media_2".into(),
-                path: "bc6ea2e3-25ae-4b71-a165-7b6c45c4f472".into(),
-                name: "bc6ea2e3-25ae-4b71-a165-7b6c45c4f472".into(),
-                duration: 12.8,
-                kind: MediaKind::Video,
-            },
-        ];
+        let media_bin = Vec::new();
 
         Self {
             focus_handle,
@@ -323,39 +281,65 @@ impl PreditWorkspace {
         }
     }
 
-    pub fn generate_demo_or_whisper_captions(&mut self) {
+    pub fn generate_ai_captions(&mut self) {
+        let first_media = self
+            .history
+            .present
+            .video_tracks
+            .iter()
+            .flat_map(|t| t.clips.iter().map(|c| c.source_file.clone()))
+            .chain(
+                self.history
+                    .present
+                    .audio_tracks
+                    .iter()
+                    .flat_map(|t| t.clips.iter().map(|c| c.source_file.clone())),
+            )
+            .next();
+
+        let Some(media_path) = first_media else {
+            self.ai_status_message =
+                "No media found on timeline. Please import video or audio first.".into();
+            return;
+        };
+
         let mode = self.config.caption_track_mode;
-        let pairs = vec![
-            BilingualCaptionPair {
-                id: 1,
-                start_time: 0.4,
-                end_time: 3.6,
-                en: "Zero-copy GPU rendering powered by Rust & GPUI.".into(),
-                vi: "Kết xuất GPU zero-copy được tăng tốc bởi Rust & GPUI.".into(),
-            },
-            BilingualCaptionPair {
-                id: 2,
-                start_time: 3.8,
-                end_time: 7.4,
-                en: "Ephemeral Whisper sidecar reclaims 100% of RAM on exit.".into(),
-                vi: "Tiến trình Whisper tự giải phóng 100% RAM ngay khi hoàn tất.".into(),
-            },
-            BilingualCaptionPair {
-                id: 3,
-                start_time: 7.6,
-                end_time: 11.5,
-                en: "Edit text styles, rounded boxes, and CapCut presets in real time.".into(),
-                vi: "Chỉnh sửa kiểu chữ, khung bo góc và preset CapCut theo thời gian thực."
-                    .into(),
-            },
-        ];
-        self.history
-            .mutate(|s| inject_bilingual_text_tracks(s, &pairs, mode));
-        self.ai_status_message = format!(
-            "Generated {} caption pairs ({:?}) • Sidecar RAM Purged",
-            pairs.len(),
-            mode
-        );
+        self.ai_status_message = format!("Transcribing '{}' with whisper-cli...", media_path);
+
+        match ai_services::whisper::transcribe_with_local_whisper(&media_path) {
+            Ok(words) => {
+                let segments = ai_services::chunker::chunk_words_into_captions(&words);
+                if segments.is_empty() {
+                    self.ai_status_message = "Whisper produced 0 speech segments.".into();
+                    return;
+                }
+                let pairs: Vec<BilingualCaptionPair> = segments
+                    .into_iter()
+                    .map(|s| BilingualCaptionPair {
+                        id: s.id,
+                        start_time: s.start_time,
+                        end_time: s.end_time,
+                        en: s.src.clone(),
+                        vi: s.src,
+                    })
+                    .collect();
+
+                self.history
+                    .mutate(|s| inject_bilingual_text_tracks(s, &pairs, mode));
+                self.ai_status_message = format!(
+                    "Generated {} caption pairs ({:?}) • Sidecar RAM Purged",
+                    pairs.len(),
+                    mode
+                );
+            }
+            Err(e) => {
+                self.ai_status_message = format!("Transcription failed: {}", e);
+            }
+        }
+    }
+
+    pub fn generate_demo_or_whisper_captions(&mut self) {
+        self.generate_ai_captions();
     }
 
     pub fn trigger_export_ass_and_mp4(&mut self) {
