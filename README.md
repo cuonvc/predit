@@ -33,9 +33,10 @@ Download and place `ggml-base.bin` into the model directories:
 npm run setup:whisper
 ```
 
-### 3. Run Development Server
+### 3. Run Development Server & Unit Tests
 ```bash
 npm run dev
+npm test
 ```
 
 ### 4. Build Release Desktop Executable

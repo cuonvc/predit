@@ -94,9 +94,10 @@ Always consult the detailed references when modifying core systems:
 ## 4. Verification & Testing Procedure
 
 When making changes to the codebase:
-1. Verify TypeScript compiles without errors: `npm run build` or `npx tsc --noEmit`.
-2. Ensure both English and Vietnamese locale keys match 1:1 between `en.json` and `vi.json`.
-3. Verify that non-destructive actions (`Split`, `Trim Left`, `Trim Right`, `Delete`) push snapshots to Undo (`Ctrl+Z`) and Redo (`Ctrl+Y`).
-4. Validate that generated `.ass` content correctly sets `PlayResX`, `PlayResY`, and formats style colors to `&HAABBGGRR`.
-5. Ensure desktop executable builds cleanly via `npm run build:exe`.
-6. Confirm documentation files are updated to reflect the new state.
+1. Run the automated unit test suite: `npm test`.
+2. Verify TypeScript compiles without errors: `npm run build` or `npx tsc --noEmit`.
+3. Ensure both English and Vietnamese locale keys match 1:1 between `en.json` and `vi.json`.
+4. Verify that non-destructive actions (`Split`, `Trim Left`, `Trim Right`, `Delete`) push snapshots to Undo (`Ctrl+Z`) and Redo (`Ctrl+Y`).
+5. Validate that generated `.ass` content correctly sets `PlayResX`, `PlayResY`, and formats style colors to `&HAABBGGRR`.
+6. Ensure desktop executable builds cleanly via `npm run build:exe`.
+7. Confirm documentation files are updated to reflect the new state.

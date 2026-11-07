@@ -2,6 +2,47 @@
  * Media utilities for duration detection, URI resolution, and audio extraction
  */
 
+export const IMAGE_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "webp",
+  "gif",
+  "svg",
+  "bmp",
+] as const;
+
+export const VIDEO_EXTENSIONS = [
+  "mp4",
+  "mov",
+  "mkv",
+  "webm",
+  "avi",
+  "wmv",
+  "flv",
+  "m4v",
+] as const;
+
+export const AUDIO_EXTENSIONS = [
+  "mp3",
+  "wav",
+  "m4a",
+  "aac",
+  "ogg",
+  "flac",
+] as const;
+
+export function getMediaKind(
+  filePath: string
+): "video" | "audio" | "image" | "unknown" {
+  const normalized = (filePath || "").replace(/\\/g, "/");
+  const ext = normalized.split(".").pop()?.toLowerCase() || "";
+  if ((IMAGE_EXTENSIONS as readonly string[]).includes(ext)) return "image";
+  if ((VIDEO_EXTENSIONS as readonly string[]).includes(ext)) return "video";
+  if ((AUDIO_EXTENSIONS as readonly string[]).includes(ext)) return "audio";
+  return "unknown";
+}
+
 export async function detectMediaDuration(
   filePath: string,
   isVideo: boolean
@@ -21,23 +62,13 @@ export async function detectMediaDuration(
       media.onerror = () => finish(30);
       setTimeout(() => finish(30), 1500);
 
-      const isTauri =
-        typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-      if (
-        isTauri &&
-        !filePath.startsWith("blob:") &&
-        !filePath.startsWith("http")
-      ) {
-        import("@tauri-apps/api/core")
-          .then(({ convertFileSrc }) => {
-            media.src = convertFileSrc(filePath);
-          })
-          .catch(() => {
-            media.src = filePath;
-          });
-      } else {
-        media.src = filePath;
-      }
+      resolveMediaSrc(filePath)
+        .then((resolved) => {
+          media.src = resolved;
+        })
+        .catch(() => {
+          media.src = filePath;
+        });
     } catch {
       resolve(30);
     }

@@ -2,11 +2,14 @@ import React, { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AspectRatioPreset,
-  AudioClip,
+  computeEffectiveTextStyle,
+  getTimelineTotalDuration,
   useTimelineStore,
-  VideoClip,
 } from "../../store/useTimelineStore";
-import { detectMediaDuration } from "../../services/mediaUtils";
+import { detectMediaDuration, getMediaKind } from "../../services/mediaUtils";
+import { useResolvedMediaSrc } from "../../hooks/useResolvedMediaSrc";
+import { OverlayLayerItem } from "./OverlayLayerItem";
+import { AudioClipPlayer } from "./AudioClipPlayer";
 
 function hexToRgba(hex: string, alpha: number): string {
   const clean = (hex || "#000000").replace("#", "");
@@ -22,267 +25,6 @@ function resolveCssFontFamily(family?: string): string {
   }
   return `"${family}", sans-serif`;
 }
-
-/** Renders an active image or PIP video overlay on the preview canvas */
-const OverlayLayerItem: React.FC<{
-  clip: VideoClip;
-  trackId: string;
-  playheadTime: number;
-  isPlaying: boolean;
-  isSelected: boolean;
-  onStartDrag: (e: React.MouseEvent) => void;
-}> = ({ clip, playheadTime, isPlaying, isSelected, onStartDrag }) => {
-  const [resolvedSrc, setResolvedSrc] = useState<string>("");
-  const vidRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    const srcFile = clip.sourceFile;
-    if (!srcFile) {
-      setResolvedSrc("");
-      return;
-    }
-    const isTauri =
-      typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-    if (
-      isTauri &&
-      !srcFile.startsWith("blob:") &&
-      !srcFile.startsWith("http")
-    ) {
-      import("@tauri-apps/api/core")
-        .then(({ convertFileSrc }) => {
-          setResolvedSrc(convertFileSrc(srcFile));
-        })
-        .catch(() => setResolvedSrc(srcFile));
-    } else {
-      setResolvedSrc(srcFile);
-    }
-  }, [clip.sourceFile]);
-
-  useEffect(() => {
-    const vid = vidRef.current;
-    if (!vid || clip.mediaKind === "image") return;
-    vid.playbackRate = clip.playbackRate || 1.0;
-    vid.volume = Math.min(1, Math.max(0, clip.volume ?? 1.0));
-    if (isPlaying) {
-      vid.play().catch(() => {});
-    } else {
-      vid.pause();
-    }
-  }, [isPlaying, clip.playbackRate, clip.volume, clip.mediaKind, resolvedSrc]);
-
-  useEffect(() => {
-    const vid = vidRef.current;
-    if (!vid || clip.mediaKind === "image") return;
-    const rate = clip.playbackRate || 1.0;
-    const localOffset = Math.max(0, playheadTime - clip.startTime);
-    const targetTime = Math.min(
-      clip.sourceEnd,
-      clip.sourceStart + localOffset * rate
-    );
-    const tolerance = isPlaying ? 0.28 : 0.05;
-    if (Math.abs(vid.currentTime - targetTime) > tolerance) {
-      try {
-        vid.currentTime = targetTime;
-      } catch {
-        // ignore
-      }
-    }
-  }, [playheadTime, clip, isPlaying]);
-
-  const posX = clip.position?.x ?? 0.5;
-  const posY = clip.position?.y ?? 0.5;
-  const scale = clip.scale ?? 0.4;
-
-  return (
-    <div
-      onMouseDown={onStartDrag}
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        top: `${Math.round(posY * 100)}%`,
-        left: `${Math.round(posX * 100)}%`,
-        width: `${Math.round(scale * 100)}%`,
-        transform: "translate(-50%, -50%)",
-      }}
-      className={`absolute z-15 cursor-move select-none rounded overflow-visible transition-shadow ${
-        isSelected
-          ? "ring-2 ring-[#00c8d2] shadow-lg"
-          : "hover:ring-1 hover:ring-white/70"
-      }`}
-    >
-      {resolvedSrc &&
-        (clip.mediaKind === "image" ? (
-          <img
-            src={resolvedSrc}
-            alt="Overlay"
-            draggable={false}
-            className="w-full h-auto object-contain rounded pointer-events-none block"
-          />
-        ) : (
-          <video
-            ref={vidRef}
-            src={resolvedSrc}
-            muted={clip.muted}
-            playsInline
-            className="w-full h-auto object-contain rounded pointer-events-none block"
-          />
-        ))}
-      {isSelected && (
-        <>
-          <span className="w-2 h-2 bg-[#00c8d2] border border-black absolute -top-1 -left-1 rounded-full" />
-          <span className="w-2 h-2 bg-[#00c8d2] border border-black absolute -top-1 -right-1 rounded-full" />
-          <span className="w-2 h-2 bg-[#00c8d2] border border-black absolute -bottom-1 -left-1 rounded-full" />
-          <span className="w-2 h-2 bg-[#00c8d2] border border-black absolute -bottom-1 -right-1 rounded-full" />
-        </>
-      )}
-    </div>
-  );
-};
-
-/** Renders and plays an audio clip in sync with the timeline playhead */
-const AudioClipPlayer: React.FC<{
-  clip: AudioClip;
-  playheadTime: number;
-  isPlaying: boolean;
-}> = ({ clip, playheadTime, isPlaying }) => {
-  const [resolvedSrc, setResolvedSrc] = useState<string>("");
-  const audioRef = useRef<HTMLAudioElement>(null);
-
-  useEffect(() => {
-    const srcFile = clip.sourceFile;
-    if (!srcFile) {
-      setResolvedSrc("");
-      return;
-    }
-    const isTauri =
-      typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-    if (
-      isTauri &&
-      !srcFile.startsWith("blob:") &&
-      !srcFile.startsWith("http")
-    ) {
-      import("@tauri-apps/api/core")
-        .then(({ convertFileSrc }) => {
-          setResolvedSrc(convertFileSrc(srcFile));
-        })
-        .catch(() => setResolvedSrc(srcFile));
-    } else {
-      setResolvedSrc(srcFile);
-    }
-  }, [clip.sourceFile]);
-
-  const isWithinRange =
-    playheadTime >= clip.startTime && playheadTime <= clip.endTime;
-
-  // Sync volume, mute, fadeIn, fadeOut, and playbackRate
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (clip.muted) {
-      audio.muted = true;
-      return;
-    }
-    audio.muted = false;
-
-    const baseVol = Math.min(1, Math.max(0, clip.volume ?? 1.0));
-    let volMultiplier = 1.0;
-    const offset = playheadTime - clip.startTime;
-    const remaining = clip.endTime - playheadTime;
-
-    if (clip.fadeIn > 0 && offset < clip.fadeIn && offset >= 0) {
-      volMultiplier *= Math.max(0, offset / clip.fadeIn);
-    }
-    if (clip.fadeOut > 0 && remaining < clip.fadeOut && remaining >= 0) {
-      volMultiplier *= Math.max(0, remaining / clip.fadeOut);
-    }
-
-    audio.volume = Math.min(1, Math.max(0, baseVol * volMultiplier));
-    if (clip.playbackRate) {
-      audio.playbackRate = clip.playbackRate;
-    }
-  }, [
-    clip.volume,
-    clip.muted,
-    clip.fadeIn,
-    clip.fadeOut,
-    clip.playbackRate,
-    playheadTime,
-    clip.startTime,
-    clip.endTime,
-  ]);
-
-  // Sync play / pause state
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !resolvedSrc) return;
-
-    if (isPlaying && isWithinRange) {
-      const speed = clip.playbackRate || 1.0;
-      const localOffset = Math.max(0, playheadTime - clip.startTime);
-      const targetTime = Math.min(
-        clip.sourceEnd,
-        clip.sourceStart + localOffset * speed
-      );
-      if (Math.abs(audio.currentTime - targetTime) > 0.15) {
-        try {
-          audio.currentTime = targetTime;
-        } catch {
-          // ignore seek errors
-        }
-      }
-      audio.play().catch(() => {});
-    } else {
-      audio.pause();
-    }
-  }, [isPlaying, isWithinRange, resolvedSrc]);
-
-  // Sync currentTime on playhead movement
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !resolvedSrc) return;
-
-    if (isWithinRange) {
-      const speed = clip.playbackRate || 1.0;
-      const localOffset = Math.max(0, playheadTime - clip.startTime);
-      const targetTime = Math.min(
-        clip.sourceEnd,
-        clip.sourceStart + localOffset * speed
-      );
-      const tolerance = isPlaying ? 0.28 : 0.04;
-      if (Math.abs(audio.currentTime - targetTime) > tolerance) {
-        try {
-          audio.currentTime = targetTime;
-        } catch {
-          // ignore
-        }
-      }
-    } else {
-      if (!audio.paused) {
-        audio.pause();
-      }
-    }
-  }, [
-    playheadTime,
-    isWithinRange,
-    clip.sourceStart,
-    clip.sourceEnd,
-    clip.startTime,
-    clip.playbackRate,
-    isPlaying,
-    resolvedSrc,
-  ]);
-
-  if (!resolvedSrc) return null;
-
-  return (
-    <audio
-      ref={audioRef}
-      src={resolvedSrc}
-      preload="auto"
-      className="hidden"
-    />
-  );
-};
 
 function formatCapCutTimecode(sec: number, fps = 30): string {
   const totalSec = Math.max(0, sec);
@@ -313,7 +55,6 @@ export const VideoPreviewCanvas: React.FC = () => {
   const isPlaying = useTimelineStore((s) => s.isPlaying);
   const selectedClip = useTimelineStore((s) => s.selectedClip);
   const setPlayheadTime = useTimelineStore((s) => s.setPlayheadTime);
-  const setIsPlaying = useTimelineStore((s) => s.setIsPlaying);
   const togglePlay = useTimelineStore((s) => s.togglePlay);
   const setSelectedClip = useTimelineStore((s) => s.setSelectedClip);
   const setAspectRatio = useTimelineStore((s) => s.setAspectRatio);
@@ -341,7 +82,7 @@ export const VideoPreviewCanvas: React.FC = () => {
         .map((clip) => ({ trackId: track.id, clip }))
     );
 
-  const [resolvedVideoSrc, setResolvedVideoSrc] = useState<string>("");
+  const resolvedVideoSrc = useResolvedMediaSrc(activeVideoClip?.sourceFile);
   const [isPlayerDragOver, setIsPlayerDragOver] = useState(false);
   const [draggingItem, setDraggingItem] = useState<{
     kind: "text" | "overlay";
@@ -390,48 +131,11 @@ export const VideoPreviewCanvas: React.FC = () => {
     };
   }, [draggingItem, updateTextStyle, updateOverlayPosition]);
 
-  const maxVideoEnd = Math.max(
-    0,
-    ...videoTracks.flatMap((tr) => tr.clips.map((c) => c.endTime))
+  const totalDuration = getTimelineTotalDuration(
+    videoTracks,
+    audioTracks,
+    textTracks
   );
-  const maxAudioEnd = Math.max(
-    0,
-    ...audioTracks.flatMap((tr) => tr.clips.map((c) => c.endTime))
-  );
-  const maxTextEnd = Math.max(
-    0,
-    ...textTracks.flatMap((tr) => tr.clips.map((c) => c.endTime))
-  );
-  const totalDuration = Math.max(
-    5,
-    maxVideoEnd > 0
-      ? Math.max(maxVideoEnd, maxAudioEnd)
-      : Math.max(maxAudioEnd, maxTextEnd)
-  );
-
-  // Resolve active video clip source URL
-  useEffect(() => {
-    const srcFile = activeVideoClip?.sourceFile;
-    if (!srcFile) {
-      setResolvedVideoSrc("");
-      return;
-    }
-    const isTauri =
-      typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-    if (
-      isTauri &&
-      !srcFile.startsWith("blob:") &&
-      !srcFile.startsWith("http")
-    ) {
-      import("@tauri-apps/api/core")
-        .then(({ convertFileSrc }) => {
-          setResolvedVideoSrc(convertFileSrc(srcFile));
-        })
-        .catch(() => setResolvedVideoSrc(srcFile));
-    } else {
-      setResolvedVideoSrc(srcFile);
-    }
-  }, [activeVideoClip?.sourceFile]);
 
   // Sync play/pause & playbackRate with active video clip
   useEffect(() => {
@@ -495,20 +199,9 @@ export const VideoPreviewCanvas: React.FC = () => {
     if (!files.length) return;
     for (const file of files) {
       const rawPath = (file as any).path || file.name;
-      const normalized = rawPath.replace(/\\/g, "/");
-      const ext = normalized.split(".").pop()?.toLowerCase() || "";
-      const isVideo = [
-        "mp4",
-        "mov",
-        "mkv",
-        "webm",
-        "avi",
-        "wmv",
-        "flv",
-        "m4v",
-      ].includes(ext);
-      const isAudio = ["mp3", "wav", "m4a", "aac", "ogg", "flac"].includes(ext);
-      if (isVideo || isAudio) {
+      const kind = getMediaKind(rawPath);
+      if (kind === "video" || kind === "audio") {
+        const isVideo = kind === "video";
         const effectiveUri = (file as any).path || URL.createObjectURL(file);
         detectMediaDuration(effectiveUri, isVideo).then((duration) => {
           importMediaFile(effectiveUri, isVideo ? "video" : "audio", duration);
@@ -563,18 +256,10 @@ export const VideoPreviewCanvas: React.FC = () => {
         .map((clip) => ({
           track,
           clip,
-          effectiveStyle: {
-            ...track.stylePreset,
-            ...(clip.overrideStyle || {}),
-            backgroundBox: {
-              ...track.stylePreset.backgroundBox,
-              ...(clip.overrideStyle?.backgroundBox || {}),
-            },
-            position: {
-              ...track.stylePreset.position,
-              ...(clip.overrideStyle?.position || {}),
-            },
-          },
+          effectiveStyle: computeEffectiveTextStyle(
+            track.stylePreset,
+            clip.overrideStyle
+          ),
         }))
     );
 

@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { TransitionType, useTimelineStore } from "../../store/useTimelineStore";
-import { detectMediaDuration } from "../../services/mediaUtils";
+import {
+  getTimelineTotalDuration,
+  TransitionType,
+  useTimelineStore,
+} from "../../store/useTimelineStore";
+import {
+  AUDIO_EXTENSIONS,
+  detectMediaDuration,
+  getMediaKind,
+  IMAGE_EXTENSIONS,
+  VIDEO_EXTENSIONS,
+} from "../../services/mediaUtils";
 import { Playhead } from "./Playhead";
 import { TrackRow } from "./TrackRow";
 import { ClipBlock } from "./ClipBlock";
@@ -77,18 +87,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           filters: [
             {
               name: "Media Overlays",
-              extensions: [
-                "mp4", "mov", "mkv", "webm", "avi", "wmv", "flv", "m4v",
-                "png", "jpg", "jpeg", "webp", "gif", "svg", "bmp",
-              ],
+              extensions: [...VIDEO_EXTENSIONS, ...IMAGE_EXTENSIONS],
             },
           ],
         });
         if (selected) {
           const fileList = Array.isArray(selected) ? selected : [selected];
           for (const f of fileList) {
-            const ext = f.split(".").pop()?.toLowerCase() || "";
-            const isImage = ["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp"].includes(ext);
+            const isImage = getMediaKind(f) === "image";
             const dur = isImage ? 5.0 : await detectMediaDuration(f, true);
             importMediaFile(f, "video", dur, true);
           }
@@ -112,7 +118,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           filters: [
             {
               name: "Audio Files",
-              extensions: ["mp3", "wav", "m4a", "aac", "ogg", "flac"],
+              extensions: [...AUDIO_EXTENSIONS],
             },
           ],
         });
@@ -147,21 +153,10 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   };
 
   // Dynamic total timeline duration based on actual clips
-  const maxVideoEnd = Math.max(
-    0,
-    ...videoTracks.flatMap((tr) => tr.clips.map((c) => c.endTime))
-  );
-  const maxAudioEnd = Math.max(
-    0,
-    ...audioTracks.flatMap((tr) => tr.clips.map((c) => c.endTime))
-  );
-  const maxTextEnd = Math.max(
-    0,
-    ...textTracks.flatMap((tr) => tr.clips.map((c) => c.endTime))
-  );
-  const totalDuration = Math.max(
-    5,
-    maxVideoEnd > 0 ? Math.max(maxVideoEnd, maxAudioEnd) : Math.max(maxAudioEnd, maxTextEnd)
+  const totalDuration = getTimelineTotalDuration(
+    videoTracks,
+    audioTracks,
+    textTracks
   );
 
   // Auto-Fit timeline zoom to visible container width
