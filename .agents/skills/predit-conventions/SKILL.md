@@ -6,9 +6,9 @@ description: >-
   bilingual caption pipeline rules, sidecar RAM lifecycle requirements, and documentation synchronization rules.
 ---
 
-# Predit Architecture & Coding Conventions
+# Predit Architecture & Coding Conventions (Rust + GPUI)
 
-Predit is a high-performance cross-platform desktop video editor built with **Tauri v2, React 19, TypeScript, and Rust**.
+Predit is a high-performance cross-platform desktop video editor built with **Pure Rust and GPUI (`gpui 0.2.2`)** organized as a 6-crate Cargo Workspace (`app`, `editor_core`, `media_engine`, `ai_services`, `ui_kit`, `workspace_ui`).
 Follow these procedures and conventions to maintain consistent data properties, UI styling, sidecar behaviors, and documentation integrity.
 
 ---
@@ -24,80 +24,47 @@ Always consult the detailed references when modifying core systems:
 
 ## 2. Core Architectural Invariants
 
-### 2.1 Unified Text & Dual-Track Caption Model
-* Never create a separate or isolated subtitle structure. AI captions and manual overlay titles **must both** exist as `TextClip` items inside `TextTrack` arrays.
+### 2.1 Unified Text & Dual-Track Caption Model (`crates/editor_core`)
+* Never create a separate or isolated subtitle structure. AI captions and manual overlay titles **must both** exist as `TextClip` items inside `TextTrack` vectors (`crates/editor_core/src/models/`).
 * **Bilingual Mode**: Spawns two parallel tracks:
-  * `track_text_en` with default `stylePreset.position.y = 0.78` and white text (`#FFFFFF`)
-  * `track_text_vi` with default `stylePreset.position.y = 0.86` and yellow/gold text (`#FFD700`)
-  * Paired clips share a matching `linkedGroupId: "pair_{id}"`. When `project.syncLinkedTextClips` is enabled, trimming, moving, or splitting either clip applies an identical time delta to its partner.
+  * `track_text_en` with default `style_preset.position.y = 0.78` and white text (`#FFFFFF`)
+  * `track_text_vi` with default `style_preset.position.y = 0.86` and yellow/gold text (`#FFD700`)
+  * Paired clips share a matching `linked_group_id: Some("pair_{id}")`. When `project.sync_linked_text_clips` is enabled, trimming, moving, or splitting either clip applies an identical time delta to its partner.
 * **Monolingual Mode**: Directly injects 1 subtitle track from the local speech-to-text without invoking cloud translation, requiring no API key.
 
-### 2.2 Standardized Local Whisper Model & Desktop Packaging
-* Standardize exclusively on `ggml-base.bin` (140 MB). Never download or bundle alternative Whisper weights.
-* `src-tauri/tauri.conf.json` must bundle only `"resources/models/ggml-base.bin"` into the `.exe` installer.
-* The Auto Caption UI modal hides model and engine dropdowns; local Whisper transcription is always selected automatically.
+### 2.2 Standardized Local Whisper Model & Packaging (`crates/ai_services`)
+* Standardize exclusively on `ggml-base.bin` (140 MB) in `assets/models/ggml-base.bin`. Never download or bundle alternative Whisper weights.
+* Local Whisper transcription is invoked via `crates/ai_services/src/whisper.rs`.
 
 ### 2.3 Strict Sidecar RAM Lifecycle
 * Local Whisper models (`whisper-cli`) must run exclusively as ephemeral CLI child processes.
 * Never leave heavy AI inference runtimes idle in RAM/VRAM. The subprocess must terminate immediately after emitting JSON tokens, ensuring 100% OS memory reclamation before translation begins.
 
 ### 2.4 Groq Translation & Rate Limit Pending (HTTP 429) Invariant
-* **Active Production Models** (in priority order):
-  1. `openai/gpt-oss-120b` (Primary highest-intelligence translation)
-  2. `openai/gpt-oss-20b` (Ultra-fast ~1000 tps fallback)
-  3. `qwen/qwen3.8-27b` (High-quality 27B multilingual fallback)
-  4. `llama-3.3-70b-versatile` & `llama-3.1-8b-instant` (Secondary fallbacks)
-  *(Decommissioned models like `gemma2-9b-it` and `llama-3.1-70b-versatile` must NEVER be used).*
-* **Batch Size**: 20 segments per batch (optimally sized to stay under the free-tier 1000 OTPM ceiling).
+* **Active Production Models** (`crates/ai_services/src/groq_translator.rs`, in priority order):
+  1. `openai/gpt-oss-120b`
+  2. `openai/gpt-oss-20b`
+  3. `qwen/qwen3.8-27b`
+  4. `llama-3.3-70b-versatile` & `llama-3.1-8b-instant`
+* **Batch Size**: 20 segments per batch.
 * **Automatic Pending & Retry on HTTP 429**:
-  * Parse cooldown seconds from `retry-after` header or `"Please try again in X.Xs"` in error text.
-  * Add a 2-second safety buffer (`cooldown = retrySeconds + 2`).
-  * If other candidate models are configured, try them first; if all hit rate limits, enter the **Pending** countdown state.
-  * Emit live 1-second countdown ticks to the UI via `onRateLimitPending`.
-  * Automatically retry the batch up to 6 times without crashing or losing translation progress.
+  * Parse cooldown seconds via `parse_retry_after_seconds`.
+  * Add a 2-second safety buffer (`cooldown = retry_seconds + 2`).
+  * Retry up to 6 times per batch.
 
 ### 2.5 UI Language Isolation
-* The Application Language selector (`EN` / `VI`) **must reside inside the Settings dialog** (`SettingsModal.tsx`), not in the top navigation header.
-* UI language preference is stored in `usePreditConfigStore.ts` and must **never** be stored in the undoable timeline state.
-* All user-facing strings must have corresponding entries in both `src/locales/en.json` and `src/locales/vi.json`.
+* The Application Language selector (`EN` / `VI`) **must reside inside the Settings dialog** (`crates/workspace_ui/src/modals/settings_modal.rs`), not in the top navigation header.
+* UI language preference is stored in `PreditConfig` (`crates/editor_core/src/config.rs`) and must **never** be stored in the undoable `TimelineHistory`.
+* All user-facing strings must have corresponding entries in both `assets/locales/en.json` and `assets/locales/vi.json`.
 
 ### 2.6 Documentation Synchronization Invariant (STRICT)
 * **Whenever any feature, schema, model configuration, pipeline behavior, UI workflow, or dependency changes in the codebase, all corresponding documentation files MUST be updated in the same turn.**
-* Relevant documents to update upon behavioral change:
-  - `.agents/skills/predit-conventions/SKILL.md`
-  - `.agents/skills/predit-conventions/references/*.md`
-  - `AGENTS.md`
-  - `predit_system_design.md`
-  - `predit_directory_structure.md`
-  - `README.md`
-* Never allow documentation to drift from the actual code or leave obsolete models, parameters, or behaviors documented.
 
 ---
 
-## 3. TypeScript & React Coding Standards
-
-1. **Strict Typing**:
-   * No `any` types for timeline items or state actions.
-   * Prefer discriminated unions (e.g. `trackType: "video" | "audio" | "text"`).
-2. **State Mutation Discipline**:
-   * All timeline mutations in `useTimelineStore.ts` must produce immutable updates (e.g. `map`, `filter`, spread operator) to ensure `zundo` snapshot history works correctly.
-   * Ephemeral UI values (`playheadTime`, `isPlaying`, `selectedClip`, `applyStyleToAllTrack`) are excluded from history in `partialize`.
-3. **Styling & Colors**:
-   * Use the CapCut matte dark palette: `#0e0e10` (root/stage), `#18181b` (panels), `#222226` (elevated), `#27272c` (inputs), `#2a2a2e` (borders), and `#00c8d2` (primary cyan accent).
-   * Avoid introducing arbitrary bright colors or rainbow badges.
-4. **Time & Float Precision**:
-   * All timestamps (`startTime`, `endTime`, `playheadTime`) are in seconds.
-   * Round timestamps to 2 decimal places using `Number(val.toFixed(2))` to avoid floating-point drift.
-
----
-
-## 4. Verification & Testing Procedure
+## 3. Verification & Testing Procedure
 
 When making changes to the codebase:
-1. Run the automated unit test suite: `npm test`.
-2. Verify TypeScript compiles without errors: `npm run build` or `npx tsc --noEmit`.
-3. Ensure both English and Vietnamese locale keys match 1:1 between `en.json` and `vi.json`.
-4. Verify that non-destructive actions (`Split`, `Trim Left`, `Trim Right`, `Delete`) push snapshots to Undo (`Ctrl+Z`) and Redo (`Ctrl+Y`).
-5. Validate that generated `.ass` content correctly sets `PlayResX`, `PlayResY`, and formats style colors to `&HAABBGGRR`.
-6. Ensure desktop executable builds cleanly via `npm run build:exe`.
-7. Confirm documentation files are updated to reflect the new state.
+1. Run the automated unit test suite across the pure-Rust crates: `cargo test -p editor_core -p ai_services -p media_engine`.
+2. Verify the GPUI desktop binary compiles cleanly: `cargo check --workspace`.
+3. Confirm documentation files are updated to reflect the new state.

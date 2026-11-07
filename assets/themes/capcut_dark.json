@@ -1,0 +1,23 @@
+{
+  "name": "CapCut Dark",
+  "mode": "dark",
+  "palette": {
+    "bg_root": "#0e0e10",
+    "bg_panel": "#18181b",
+    "bg_card": "#222226",
+    "bg_input": "#27272c",
+    "border": "#2a2a2e",
+    "accent": "#00c8d2",
+    "text_primary": "#f4f4f5",
+    "text_secondary": "#a1a1aa",
+    "text_muted": "#71717a"
+  },
+  "tracks": {
+    "caption_en": "#8c4a32",
+    "caption_vi": "#703b28",
+    "manual_title": "#5c4b8a",
+    "video": "#27272a",
+    "audio": "#1c3d52"
+  }
+}
+

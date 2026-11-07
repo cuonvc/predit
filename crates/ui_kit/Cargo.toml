@@ -1,0 +1,10 @@
+[package]
+name = "ui_kit"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gpui.workspace = true
+editor_core.workspace = true
+media_engine.workspace = true
+

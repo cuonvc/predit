@@ -1,0 +1,13 @@
+[package]
+name = "workspace_ui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gpui.workspace = true
+editor_core.workspace = true
+media_engine.workspace = true
+ai_services.workspace = true
+ui_kit.workspace = true
+rfd.workspace = true
+

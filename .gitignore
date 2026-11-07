@@ -1,4 +1,10 @@
-# Dependencies
+# Rust & GPUI build artifacts
+target/
+**/target/
+Cargo.lock.bak
+*.pdb
+
+# Dependencies (legacy web frontend if any)
 node_modules/
 .pnp
 .pnp.js
@@ -10,20 +16,17 @@ build/
 out/
 *.local
 
-# Tauri & Rust build artifacts
-src-tauri/target/
-src-tauri/gen/
-**/target/
-Cargo.lock.bak
-
-# Large Sidecar Executables (Managed by externalBin, should be downloaded or built locally)
-src-tauri/binaries/*
-!src-tauri/binaries/.gitkeep
+# Large Sidecar Executables & Dynamic Libraries (downloaded or built locally)
+binaries/*
+!binaries/.gitkeep
 *.exe
+*.dll
+*.dylib
+*.so
 
-# Large AI Model Weights (GGML / GGUF Whisper weights, e.g. ggml-large-v3-turbo-q5_0.bin)
-src-tauri/resources/models/*
-!src-tauri/resources/models/.gitkeep
+# Large AI Model Weights (GGML / GGUF Whisper weights, e.g. ggml-base.bin 140MB - exceeds GitHub 100MB limit)
+assets/models/*
+!assets/models/.gitkeep
 *.bin
 *.gguf
 
@@ -75,4 +78,3 @@ lerna-debug.log*
 ehthumbs.db
 Thumbs.db
 [Dd]esktop.ini
-

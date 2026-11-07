@@ -1,0 +1,19 @@
+[package]
+name = "predit"
+version.workspace = true
+edition.workspace = true
+build = "build.rs"
+
+[[bin]]
+name = "predit"
+path = "src/main.rs"
+
+[dependencies]
+gpui.workspace = true
+editor_core.workspace = true
+media_engine.workspace = true
+ai_services.workspace = true
+ui_kit.workspace = true
+workspace_ui.workspace = true
+anyhow.workspace = true
+

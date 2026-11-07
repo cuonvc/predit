@@ -1,88 +1,123 @@
-# Predit — Repository Directory Structure & File Organization
+# Predit (Rust + GPUI) — Repository Directory Structure & File Organization
 
-## 1. Monorepo & Project Tree
+## 1. Cargo Workspace & Crate Tree
 
 ```text
 predit/
-├── package.json                  # Frontend dependencies & scripts (React, Zustand, i18next, Lucide, Vitest)
-├── tsconfig.json                 # TypeScript compiler configuration
-├── tailwind.config.js            # Tailwind CSS theme & typography settings (Inter, Be Vietnam Pro)
-├── vite.config.ts                # Vite bundler config for Tauri
-├── plans/                        # Archived architectural & large-change execution plans
-│   └── predit_refactoring_plan_20261107.md # Step-by-step modular refactoring & bug-fix roadmap
-├── src/                          # React Frontend Source Code
-│   ├── main.tsx                  # React entry point with i18n provider
-│   ├── App.tsx                   # Main layout container (TopBar, Preview, Inspector, Timeline)
-│   ├── locales/                  # Bilingual UI Dictionaries
-│   │   ├── en.json               # English UI translations
-│   │   └── vi.json               # Vietnamese UI translations
-│   ├── hooks/                    # Shared React Hooks
-│   │   └── useResolvedMediaSrc.ts # Tauri asset protocol / browser media URI resolver hook
-│   ├── store/                    # Zustand State Management
-│   │   ├── useTimelineStore.ts   # Public store hook & re-exports wrapped in zundo temporal Undo/Redo
-│   │   ├── timelineTypes.ts      # Timeline interfaces & types (VideoClip, AudioClip, TextTrack, TimelineState)
-│   │   ├── timelineDefaults.ts   # Default aspect ratios, text style presets & initial tracks
-│   │   ├── timelineHelpers.ts    # Pure timeline packing, duration, retiming & track pruning helpers
-│   │   ├── operations/           # Modular pure state transformers for useTimelineStore
-│   │   │   ├── playheadEditOps.ts     # Split, trim left/right, and delete operations
-│   │   │   ├── clipMoveDurationOps.ts # Clip drag/move across tracks, duration & overlay position updates
-│   │   │   ├── textCaptionOps.ts      # Manual title creation, style updates & bilingual track injection
-│   │   │   └── mediaImportOps.ts      # Video, overlay, audio import & detach audio operations
-│   │   ├── __tests__/            # Automated Store Unit Tests (Vitest)
-│   │   │   └── useTimelineStore.test.ts # Split, trim, move, bilingual sync & undo/redo test suite
-│   │   └── usePreditConfigStore.ts # Persistent app preferences (UI language, standardized ggml-base.bin, API keys)
-│   ├── components/               # UI Components
-│   │   ├── topbar/               # Project title, Aspect Ratio Switcher (16:9, 9:16), Settings Modal trigger, Export Button
-│   │   ├── preview/              # Interactive video stage & synchronized media players
-│   │   │   ├── VideoPreviewCanvas.tsx # Main preview stage, text bounding boxes & playback loop
-│   │   │   ├── OverlayLayerItem.tsx   # Draggable PIP video / image overlay item on canvas
-│   │   │   └── AudioClipPlayer.tsx    # Playhead-synchronized HTML5 audio track player
-│   │   ├── inspector/            # Right-side property panel
-│   │   │   ├── TextStylePanel.tsx          # Inspector container & text/caption styling controls
-│   │   │   ├── textPresetStyles.ts         # Static CapCut text preset catalog & active preset matcher
-│   │   │   ├── TextPresetGridSection.tsx   # Visual CapCut text preset grid selector section
-│   │   │   ├── TextBackgroundBoxSection.tsx # Rounded background box controls section
-│   │   │   ├── TrackPresetToggle.tsx       # Track-wide vs single-clip style toggle
-│   │   │   └── AudioPanel.tsx              # Volume, speed, transition & detach audio controls
-│   │   ├── timeline/             # MultiTrackTimeline.tsx, TrackRow.tsx, ClipBlock.tsx, Playhead.tsx
-│   │   └── modals/               # Left sidebar tabs & application dialogs
-│   │       ├── AutoCaptionModal.tsx   # Left sidebar shell + AI Captions tab (Monolingual & Bilingual)
-│   │       ├── MediaBinTab.tsx        # Media bin dropzone & imported clips grid tab
-│   │       ├── ManualTextTab.tsx      # Manual titles & text list tab
-│   │       ├── VideoMediaCard.tsx     # Media bin card with hover video/image preview
-│   │       ├── NoteTooltip.tsx        # CapCut-styled contextual hover tooltip
-│   │       ├── ExportProgressModal.tsx # FFmpeg export configuration & progress modal
-│   │       └── SettingsModal.tsx      # Application language (EN/VI) & preferences dialog
-│   └── services/                 # Business Logic & Tauri Bridge (Pure TypeScript, React-free)
-│       ├── tauriBridge.ts        # Tauri v2 shell command wrappers for FFmpeg and whisper-cli sidecars
-│       ├── mediaUtils.ts         # Media kind classification, duration probing, URI resolution & 16kHz WAV extraction
-│       ├── captionChunker.ts     # Splits raw word timestamps into screen-fitted 42-char caption clips
-│       ├── groqTranslator.ts     # Batches 20 lines -> Groq API (openai/gpt-oss-120b) with 429 rate limit pending retry
-│       ├── assCompiler.ts        # Compiles all textTracks (EN, VI, Manual) into a single UTF-8 .ass file
-│       └── ffmpegExport.ts       # Builds complex filtergraphs for export rendering and progress tracking
+├── Cargo.toml                          # Centrally manages all Workspace dependencies
+├── rust-toolchain.toml                 # Pins the Rust compiler version (1.97.0) compatible with GPUI
+├── assets/                             # Static assets bundled with the application
+│   ├── fonts/                          # Vietnamese-ready TrueType fonts (Be Vietnam Pro, Montserrat, Inter)
+│   ├── icons/                          # SVG Icons (Lucide icon set for UI)
+│   ├── locales/                        # Bilingual UI Dictionaries
+│   │   ├── en.json                     # English UI translations
+│   │   └── vi.json                     # Vietnamese UI translations
+│   ├── models/                         # Bundled local AI model weights
+│   │   └── ggml-base.bin               # Standardized 140 MB Whisper GGML model
+│   └── themes/
+│       └── capcut_dark.json            # CapCut Dark palette (#0e0e10, #18181b, #222226, #00c8d2...)
 │
-└── src-tauri/                    # Rust Desktop Core & Sidecar Binaries
-    ├── tauri.conf.json           # Tauri v2 config (assetProtocol scope, sidecar externalBin list, bundles ggml-base.bin)
-    ├── Cargo.toml                # Rust dependencies
-    ├── capabilities/             # Tauri v2 security permission policies
-    │   └── default.json          # Grants shell execute, dialog open/save, and fs read/write permissions
-    ├── resources/                # Bundled assets (fonts & GGML model weights)
-    │   ├── fonts/                # Vietnamese-ready TrueType fonts (Be Vietnam Pro, Montserrat, Inter)
-    │   └── models/               # GGML Whisper model files (ggml-base.bin exclusively)
-    ├── binaries/                 # OS-Specific Standalone Sidecar Executables (Managed by Tauri externalBin)
-    │   ├── ffmpeg-x86_64-pc-windows-msvc.exe
-    │   ├── whisper-cli-x86_64-pc-windows-msvc.exe
-    │   ├── ffmpeg-aarch64-apple-darwin
-    │   └── whisper-cli-aarch64-apple-darwin
-    └── src/                      # Rust Backend Source
-        ├── main.rs               # Tauri application bootstrap & IPC command registration
-        └── commands.rs           # Custom IPC commands for sidecar execution, file existence checks & progress streaming
+├── binaries/                           # OS-Specific Standalone Sidecar Executables
+│   ├── ffmpeg-x86_64-pc-windows-msvc.exe
+│   └── whisper-cli-x86_64-pc-windows-msvc.exe
+│
+└── crates/
+    ├── app/                            # [Binary Crate] Application entry point (package: predit)
+    │   ├── Cargo.toml
+    │   ├── build.rs                    # Build script for OS metadata
+    │   └── src/
+    │       ├── main.rs                 # Initializes GPUI Application, registers keybindings & opens main window
+    │       └── menus.rs                # Native OS menu bar configuration
+    │
+    ├── editor_core/                    # [Pure Rust] Domain Models, Config, State & Operations (Unit-tested)
+    │   ├── Cargo.toml
+    │   └── src/
+    │       ├── lib.rs
+    │       ├── config.rs               # Persistent app preferences (UI language EN/VI, Groq API Key — outside Undo history)
+    │       ├── i18n.rs                 # Translation lookup engine backed by assets/locales/{en,vi}.json
+    │       ├── project.rs              # Master TimelineState container & ProjectMeta
+    │       ├── history.rs              # Undo/Redo snapshot stack (Ctrl+Z / Ctrl+Y)
+    │       ├── presets.rs              # Default aspect ratios, initial tracks & CapCut text preset catalog
+    │       ├── helpers.rs              # Pure timeline packing, duration calculation, retiming & track pruning helpers
+    │       ├── models/                 # Modular domain types
+    │       │   ├── mod.rs
+    │       │   ├── clip.rs             # VideoClip, AudioClip, TextClip, PIP Overlay coordinates & transitions
+    │       │   ├── track.rs            # VideoTrack, AudioTrack, TextTrack (EN y: 0.78, VI y: 0.86, linked_group_id)
+    │       │   └── aspect_ratio.rs     # 16:9, 9:16, 3:4, 1:1 canvas dimension descriptors
+    │       └── operations/             # Modular pure state transformers
+    │           ├── mod.rs
+    │           ├── playhead_ops.rs     # Split, trim left/right, and delete operations at playhead
+    │           ├── clip_move_ops.rs    # Clip drag/move across tracks, duration & PIP/Text overlay position updates
+    │           ├── text_caption_ops.rs # Manual title creation, style updates & bilingual linked_group_id sync
+    │           └── media_import_ops.rs # Video, overlay, audio import & detach audio from video operations
+    │
+    ├── media_engine/                   # [Pure Rust] Video/Audio Decoding, Text Rendering, Export & Hardware Accel
+    │   ├── Cargo.toml
+    │   └── src/
+    │       ├── lib.rs
+    │       ├── probe.rs                # Media kind classification & FFmpeg binary resolution
+    │       ├── decoder.rs              # Real-time video & PIP overlay frame decoding
+    │       ├── audio_player.rs         # Multi-track synchronized audio playback & Master A/V Clock
+    │       ├── waveform.rs             # Audio waveform amplitude extraction for timeline visualization
+    │       ├── text_renderer.rs        # WYSIWYG TextClip active layer resolver
+    │       ├── ass_compiler.rs         # Compiles all text_tracks (EN, VI, Manual) into a UTF-8 .ass subtitle file
+    │       ├── exporter.rs             # Builds FFmpeg filtergraphs (setpts, chained atempo, libass) for MP4 export
+    │       └── hw_accel/               # OS-specific GPU hardware acceleration
+    │           ├── mod.rs
+    │           ├── windows_dx11.rs     # Windows DirectX 11 / NVENC interop
+    │           └── macos_metal.rs      # macOS Metal / VideoToolbox interop
+    │
+    ├── ai_services/                    # [Pure Rust] Local Whisper Transcription & Groq Bilingual Translation
+    │   ├── Cargo.toml
+    │   └── src/
+    │       ├── lib.rs
+    │       ├── whisper.rs              # Ephemeral whisper-cli subprocess manager (ggml-base.bin) with 100% RAM reclamation
+    │       ├── chunker.rs              # Splits raw word timestamps into screen-fitted <= 42-char caption clips
+    │       └── groq_translator.rs      # Batches 20 lines -> Groq API with 5-model priority fallback & HTTP 429 retry parser
+    │
+    ├── ui_kit/                         # [UI Facade Layer] Unified UI gateway & custom NLE primitives
+    │   ├── Cargo.toml
+    │   └── src/
+    │       ├── lib.rs                  # Re-exports CapCutTheme & custom NLE primitives
+    │       ├── theme.rs                # CapCut Dark tokens (#0e0e10, #18181b, #00c8d2) & track colors (#8c4a32, #703b28...)
+    │       └── primitives/             # Custom NLE-specific UI components
+    │           ├── mod.rs
+    │           ├── note_tooltip.rs     # CapCut-styled contextual tooltip badge
+    │           ├── timecode_input.rs   # 00:00:00:00 formatted timecode badge
+    │           ├── audio_meter.rs      # Real-time dB LED level meter
+    │           └── video_surface.rs    # Custom GPU viewport rendering video frames + PIP + WYSIWYG text overlays
+    │
+    └── workspace_ui/                   # [Feature Views] Main Video Editor screens, panels & modals
+        ├── Cargo.toml
+        └── src/
+            ├── lib.rs
+            ├── workspace.rs            # Main application shell composing TopBar, LeftSidebar, Player, Inspector & Timeline
+            ├── actions.rs              # Global keyboard shortcuts & GPUI actions (Play, Split, Delete, Undo/Redo...)
+            ├── topbar.rs               # Compact 40px header: [P] Predit, ● Saved, project.predit, Settings & ↗ Export Video
+            ├── left_sidebar/           # Left sidebar drawer (380px resizable) with 3 icon+label tabs
+            │   ├── mod.rs              # Sidebar navigation shell (🎞 Media, T Add Text, 💬 Captions)
+            │   ├── media_bin_tab.rs    # Media & AI Captions header, dashed dropzone & 2-column media card grid
+            │   ├── media_card.rs       # 2-column media card with OVERLAY badge, duration badge & drag-to-timeline
+            │   ├── manual_text_tab.rs  # Manual titles & text overlays management tab
+            │   └── auto_caption_tab.rs # Monolingual & Bilingual AI caption generation + HTTP 429 countdown status UI
+            ├── player/                 # Center interactive video preview monitor
+            │   ├── mod.rs              # Player panel header (1920×1080), black stage & bottom transport bar (⏮, ▶, 16:9 ⌄)
+            │   ├── canvas_stage.rs     # Aspect-ratio-locked stage (16:9 / 9:16 / 3:4 / 1:1) & subtitle composition
+            │   └── pip_overlay_item.rs # PIP video / image overlay status badge
+            ├── inspector/              # Right-side contextual property inspector (320px resizable)
+            │   ├── mod.rs              # Inspector tabs (Text | Audio / Speed) & pinned bottom Apply-to-all checkbox
+            │   ├── text_style_panel.rs # Font family, size, content readout & style controls
+            │   ├── text_preset_grid.rs # Visual CapCut text preset grid selector
+            │   ├── text_bg_box.rs      # Rounded background box toggle & opacity/radius readout
+            │   ├── track_toggle.rs     # Track-wide vs single-clip style application toggle
+            │   └── audio_video_panel.rs# Playback speed retiming (0.5x–2.0x) & Detach Audio button
+            ├── timeline/               # Bottom multi-track non-linear editing (NLE) timeline
+            │   ├── mod.rs              # Timeline toolbar (Split, Trim Left/Right, Delete, Bilingual Sync, Zoom)
+            │   ├── ruler_playhead.rs   # Timecode ruler & interactive clickable playhead ticks
+            │   ├── track_row.rs        # Track header & clip lane container
+            │   └── clip_block.rs       # Clip block renderer with bilingual linked_group_id highlight
+            └── modals/                 # Application modal dialogs
+                ├── mod.rs
+                ├── settings_modal.rs   # UI Language switcher (EN/VI) & Hardware Encoder selector
+                └── export_modal.rs     # FFmpeg filtergraph preview & .ASS + MP4 export trigger
 ```
-
-## 2. Key File Descriptions
-
-* **`src/store/useTimelineStore.ts` & `src/store/operations/*`**: The heartbeat of Predit. Stores all `videoTracks`, `audioTracks`, and `textTracks`, delegating domain logic to modular pure operation transformers (`playheadEditOps.ts`, `clipMoveDurationOps.ts`, `textCaptionOps.ts`, `mediaImportOps.ts`). Wrapped in `zundo` so every user action (splitting, trimming, dragging clips) pushes an immutable snapshot to the Undo/Redo stack (`Ctrl+Z` / `Ctrl+Y`).
-* **`src/services/tauriBridge.ts`**: The TypeScript bridge that invokes Rust commands to spawn standalone native `ffmpeg` and `whisper-cli` sidecar binaries, ensuring 100% OS memory reclamation upon process exit.
-* **`src/services/groqTranslator.ts`**: Handles batching subtitle lines into groups of 20, sending them to Groq's high-intelligence `openai/gpt-oss-120b` endpoint (with failovers to `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`, and `llama-3.3-70b-versatile`), and handling HTTP 429 rate limits via an automatic countdown pending retry mechanism.
-* **`src/services/assCompiler.ts`**: Generates the Advanced SubStation Alpha (`.ass`) subtitle file from Predit's unified `textTracks` data structure, ensuring Vietnamese diacritics render perfectly via `libass`.
-* **`src/components/modals/AutoCaptionModal.tsx` (`MediaBinTab.tsx`, `ManualTextTab.tsx`, `VideoMediaCard.tsx`, `NoteTooltip.tsx`)**: Left sidebar housing the Media Bin, Manual Titles tab, and AI Captions panel with Monolingual and Bilingual subtitle creation cards, automatic `ggml-base.bin` local transcription, contextual info tooltips, and real-time pending status updates.

@@ -1,57 +1,52 @@
-# Predit — Bilingual AI Desktop Video Editor
+# Predit — Bilingual AI Desktop Video Editor (Rust + GPUI)
 
-Predit is a lightweight, high-performance desktop video editor built with **Tauri v2, React 19, TypeScript, and Rust**, designed for rapid video production with synchronized bilingual subtitles.
+Predit is a lightweight, high-performance native desktop video editor built with **Pure Rust and GPUI (`gpui 0.2.2`)**, designed for rapid non-linear video editing with synchronized bilingual subtitles.
 
 ---
 
 ## Key Features
 
-* **CapCut Dark Aesthetic**: Minimalist `#0e0e10` / `#18181b` dark theme with single teal accent (`#00c8d2`).
-* **Non-Destructive Timeline**: Multi-track timeline (video, audio, text) powered by Zustand and `zundo` snapshot-based Undo (`Ctrl+Z`) / Redo (`Ctrl+Y`).
+* **CapCut Dark Aesthetic**: Minimalist `#0e0e10` / `#18181b` GPU-rendered dark theme with a single cyan/teal accent (`#00c8d2`).
+* **Pure Rust + GPUI Multi-Crate Architecture**:
+  * `crates/app`: Binary entry point, native OS menus, and window bootstrap.
+  * `crates/editor_core`: Pure-Rust domain models, CapCut presets, modular NLE operations (`playhead_ops`, `clip_move_ops`, `text_caption_ops`, `media_import_ops`), `TimelineHistory` Undo/Redo (`Ctrl+Z` / `Ctrl+Y`), and i18n.
+  * `crates/media_engine`: Media probing, FFmpeg decoding, audio master clock, WYSIWYG subtitle layer resolver, UTF-8 `.ass` compiler, hardware acceleration (`DX11` / `Metal`), and MP4 export pipeline.
+  * `crates/ai_services`: Ephemeral `whisper-cli` subprocess (`ggml-base.bin`), 42-char smart caption chunker, and Groq 20-line batch bilingual translator with HTTP 429 rate-limit countdown.
+  * `crates/ui_kit`: Unified UI facade layer, CapCut Dark theme tokens, timecode badge, audio dB LED meter, and GPU video viewport surface.
+  * `crates/workspace_ui`: Modular feature panels (`topbar`, `left_sidebar`, `player`, `inspector`, `timeline`, `modals`).
 * **Offline Local Speech-to-Text**: Ephemeral `whisper-cli` execution using standardized `ggml-base.bin` (140 MB). 100% of RAM/VRAM is reclaimed upon process exit.
-* **Unified Text & Subtitle Architecture**: Both manual text overlays and AI captions live as standard `TextClip` nodes on `TextTrack` lanes.
 * **Smart Bilingual & Monolingual Subtitles**:
-  * **Bilingual Mode**: Creates synchronized English (`y: 0.78`) and Vietnamese (`y: 0.86`) subtitle tracks linked by `linkedGroupId`.
+  * **Bilingual Mode**: Creates synchronized English (`y: 0.78`) and Vietnamese (`y: 0.86`) subtitle tracks linked by `linked_group_id: Some("pair_{id}")`.
   * **Monolingual Mode**: Directly creates a single subtitle track from transcribed speech without needing an API key.
-* **High-Intelligence Translation Engine with Auto-Pending**:
-  * Powered by Groq's cutting-edge models: `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`, and `llama-3.3-70b-versatile`.
-  * **HTTP 429 Rate Limit Pending Mechanism**: Automatically detects token limits, counts down second-by-second in the UI, and retries up to 6 times per batch so long videos complete without crashing.
-* **Full Application Localization (i18n)**: Instant English and Vietnamese UI switching inside the Settings dialog.
 
 ---
 
 ## Getting Started
 
 ### 1. Prerequisites
-* [Node.js](https://nodejs.org/) (v18+)
-* [Rust](https://rustup.rs/) (v1.75+)
-* Windows or macOS
+* [Rust](https://rustup.rs/) (`1.97.0`, edition 2024)
+* Windows (DirectX 11) or macOS (Metal)
 
-### 2. Setup Whisper Local Model
-Download and place `ggml-base.bin` into the model directories:
-```powershell
-npm run setup:whisper
-```
-
-### 3. Run Development Server & Unit Tests
+### 2. Run Unit Tests
 ```bash
-npm run dev
-npm test
+cargo test -p editor_core -p ai_services -p media_engine
 ```
 
-### 4. Build Release Desktop Executable
+### 3. Run Predit GPUI Desktop Application
 ```bash
-npm run build:exe
+cargo run -p predit
 ```
-The optimized native executable is output to `src-tauri/target/release/predit.exe`.
+
+### 4. Build Release Executable
+```bash
+cargo build --release -p predit
+```
 
 ---
 
 ## Documentation Reference
 * [Repository Coding Guidelines & Invariants](AGENTS.md)
 * [Architecture Conventions Skill](.agents/skills/predit-conventions/SKILL.md)
-* [Hybrid AI Caption Pipeline Reference](.agents/skills/predit-conventions/references/caption-pipeline.md)
-* [Timeline Schema & Property Conventions](.agents/skills/predit-conventions/references/timeline-schema.md)
-* [CapCut UI & Theme Conventions](.agents/skills/predit-conventions/references/theme-ui-conventions.md)
-* [System Design & Architecture](predit_system_design.md)
 * [Directory Structure](predit_directory_structure.md)
+* [GPUI Migration Plan](plans/predit_gpui_migration_plan.md)
+* [System Design & Architecture](predit_system_design.md)
