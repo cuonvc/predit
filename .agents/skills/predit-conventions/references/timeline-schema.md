@@ -106,6 +106,8 @@ export interface TextStylePreset {
     x: number;                     // Normalized 0.0 - 1.0 (0.5 = center)
     y: number;                     // Normalized 0.0 - 1.0 (0.78 = EN caption, 0.86 = VI caption, 0.14 = Title)
   };
+  boxWidth?: number;               // Normalized width 0.0 - 1.0 (custom bounding box width)
+  boxHeight?: number;              // Normalized height 0.0 - 1.0 (custom bounding box height)
 }
 
 export interface TextClip {

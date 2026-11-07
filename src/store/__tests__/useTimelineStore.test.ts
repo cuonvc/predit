@@ -488,4 +488,48 @@ describe("useTimelineStore baseline & bug verification", () => {
       });
     }
   );
+
+  it("updates text clip box dimensions (boxWidth, boxHeight) and position on edge/corner pull", () => {
+    // Add manual text clip
+    useTimelineStore.getState().setPlayheadTime(1.0);
+    useTimelineStore.getState().addManualTextClip("Interactive Subtitle Box");
+
+    const manualTrack = useTimelineStore
+      .getState()
+      .textTracks.find((t) => t.role === "manual_text")!;
+    const clip = manualTrack.clips[0];
+
+    // Simulate pulling left edge: adjusts width and X position, leaves height/Y untouched
+    useTimelineStore.getState().updateTextStyle(manualTrack.id, clip.id, {
+      position: { x: 0.45, y: 0.14 },
+      boxWidth: 0.40,
+    });
+
+    let updatedClip = useTimelineStore
+      .getState()
+      .textTracks.find((t) => t.id === manualTrack.id)!
+      .clips.find((c) => c.id === clip.id)!;
+
+    expect(updatedClip.overrideStyle?.boxWidth).toBe(0.40);
+    expect(updatedClip.overrideStyle?.position?.x).toBe(0.45);
+    expect(updatedClip.overrideStyle?.position?.y).toBe(0.14);
+    expect(updatedClip.overrideStyle?.boxHeight).toBeUndefined();
+
+    // Simulate pulling corner: adjusts 2 edges (width, height, X, Y)
+    useTimelineStore.getState().updateTextStyle(manualTrack.id, clip.id, {
+      position: { x: 0.48, y: 0.20 },
+      boxWidth: 0.52,
+      boxHeight: 0.16,
+    });
+
+    updatedClip = useTimelineStore
+      .getState()
+      .textTracks.find((t) => t.id === manualTrack.id)!
+      .clips.find((c) => c.id === clip.id)!;
+
+    expect(updatedClip.overrideStyle?.boxWidth).toBe(0.52);
+    expect(updatedClip.overrideStyle?.boxHeight).toBe(0.16);
+    expect(updatedClip.overrideStyle?.position?.x).toBe(0.48);
+    expect(updatedClip.overrideStyle?.position?.y).toBe(0.20);
+  });
 });

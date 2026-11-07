@@ -89,6 +89,8 @@ export interface TextStylePreset {
     x: number;
     y: number;
   };
+  boxWidth?: number;
+  boxHeight?: number;
 }
 
 export interface TextClip {

@@ -84,18 +84,44 @@ export const VideoPreviewCanvas: React.FC = () => {
 
   const resolvedVideoSrc = useResolvedMediaSrc(activeVideoClip?.sourceFile);
   const [isPlayerDragOver, setIsPlayerDragOver] = useState(false);
-  const [draggingItem, setDraggingItem] = useState<{
-    kind: "text" | "overlay";
+  const [overlayDragItem, setOverlayDragItem] = useState<{
     trackId: string;
     clipId: string;
   } | null>(null);
 
+  type ResizeHandle =
+    | "move"
+    | "edge-top"
+    | "edge-bottom"
+    | "edge-left"
+    | "edge-right"
+    | "corner-tl"
+    | "corner-tr"
+    | "corner-bl"
+    | "corner-br";
+
+  interface ActiveTextDragState {
+    trackId: string;
+    clipId: string;
+    handle: ResizeHandle;
+    startMouseX: number;
+    startMouseY: number;
+    stageRect: { left: number; top: number; width: number; height: number };
+    initialNormX: number;
+    initialNormY: number;
+    initialNormW: number;
+    initialNormH: number;
+  }
+
+  const [textDragState, setTextDragState] = useState<ActiveTextDragState | null>(null);
+  const textElementRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
 
-  // Mouse drag handler to move text or image/video overlay freely inside the video stage
+  // Mouse drag handler for Overlay Layer Items
   useEffect(() => {
-    if (!draggingItem) return;
+    if (!overlayDragItem) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       const stage = stageRef.current;
@@ -110,17 +136,11 @@ export const VideoPreviewCanvas: React.FC = () => {
         Math.max(0.03, Math.min(0.97, (e.clientY - rect.top) / rect.height)).toFixed(3)
       );
 
-      if (draggingItem.kind === "text") {
-        updateTextStyle(draggingItem.trackId, draggingItem.clipId, {
-          position: { x: normX, y: normY },
-        });
-      } else {
-        updateOverlayPosition(draggingItem.clipId, { x: normX, y: normY });
-      }
+      updateOverlayPosition(overlayDragItem.clipId, { x: normX, y: normY });
     };
 
     const handleMouseUp = () => {
-      setDraggingItem(null);
+      setOverlayDragItem(null);
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -129,7 +149,130 @@ export const VideoPreviewCanvas: React.FC = () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [draggingItem, updateTextStyle, updateOverlayPosition]);
+  }, [overlayDragItem, updateOverlayPosition]);
+
+  // Mouse drag & resize handler for Text Elements (edges & corners)
+  useEffect(() => {
+    if (!textDragState) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const {
+        trackId,
+        clipId,
+        handle,
+        startMouseX,
+        startMouseY,
+        stageRect,
+        initialNormX,
+        initialNormY,
+        initialNormW,
+        initialNormH,
+      } = textDragState;
+
+      const deltaNormX = (e.clientX - startMouseX) / stageRect.width;
+      const deltaNormY = (e.clientY - startMouseY) / stageRect.height;
+
+      // Pure reposition drag (body of element)
+      if (handle === "move") {
+        const normX = Number(
+          Math.max(0.02, Math.min(0.98, initialNormX + deltaNormX)).toFixed(3)
+        );
+        const normY = Number(
+          Math.max(0.02, Math.min(0.98, initialNormY + deltaNormY)).toFixed(3)
+        );
+        updateTextStyle(trackId, clipId, {
+          position: { x: normX, y: normY },
+        });
+        return;
+      }
+
+      // Initial edges in normalized stage coordinates
+      const left0 = initialNormX - initialNormW / 2;
+      const right0 = initialNormX + initialNormW / 2;
+      const top0 = initialNormY - initialNormH / 2;
+      const bottom0 = initialNormY + initialNormH / 2;
+
+      const minW = Math.max(0.03, 30 / stageRect.width);
+      const minH = Math.max(0.02, 20 / stageRect.height);
+
+      let newLeft = left0;
+      let newRight = right0;
+      let newTop = top0;
+      let newBottom = bottom0;
+
+      // Adjust left edge
+      if (
+        handle === "edge-left" ||
+        handle === "corner-tl" ||
+        handle === "corner-bl"
+      ) {
+        newLeft = Math.max(0.01, Math.min(right0 - minW, left0 + deltaNormX));
+      }
+
+      // Adjust right edge
+      if (
+        handle === "edge-right" ||
+        handle === "corner-tr" ||
+        handle === "corner-br"
+      ) {
+        newRight = Math.min(0.99, Math.max(left0 + minW, right0 + deltaNormX));
+      }
+
+      // Adjust top edge
+      if (
+        handle === "edge-top" ||
+        handle === "corner-tl" ||
+        handle === "corner-tr"
+      ) {
+        newTop = Math.max(0.01, Math.min(bottom0 - minH, top0 + deltaNormY));
+      }
+
+      // Adjust bottom edge
+      if (
+        handle === "edge-bottom" ||
+        handle === "corner-bl" ||
+        handle === "corner-br"
+      ) {
+        newBottom = Math.min(0.99, Math.max(top0 + minH, bottom0 + deltaNormY));
+      }
+
+      const newNormW = Number((newRight - newLeft).toFixed(4));
+      const newNormH = Number((newBottom - newTop).toFixed(4));
+      const newNormX = Number(((newLeft + newRight) / 2).toFixed(3));
+      const newNormY = Number(((newTop + newBottom) / 2).toFixed(3));
+
+      // 1. Single edge pull: adjust only that edge (do not adjust both horizontal and vertical)
+      if (handle === "edge-left" || handle === "edge-right") {
+        updateTextStyle(trackId, clipId, {
+          position: { x: newNormX, y: initialNormY },
+          boxWidth: newNormW,
+        });
+      } else if (handle === "edge-top" || handle === "edge-bottom") {
+        updateTextStyle(trackId, clipId, {
+          position: { x: initialNormX, y: newNormY },
+          boxHeight: newNormH,
+        });
+      } else {
+        // 2. Corner pull: adjust the 2 edges linked with that corner
+        updateTextStyle(trackId, clipId, {
+          position: { x: newNormX, y: newNormY },
+          boxWidth: newNormW,
+          boxHeight: newNormH,
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setTextDragState(null);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [textDragState, updateTextStyle]);
 
   const totalDuration = getTimelineTotalDuration(
     videoTracks,
@@ -244,6 +387,61 @@ export const VideoPreviewCanvas: React.FC = () => {
     videoTransitionStyle = { transform: `translateX(${translatePct}%)` };
   }
 
+  // Initiate drag or resize for text elements
+  const startTextDrag = (
+    e: React.MouseEvent,
+    trackId: string,
+    clipId: string,
+    handle: ResizeHandle,
+    effectiveStyle: ReturnType<typeof computeEffectiveTextStyle>,
+    elementRef: HTMLDivElement | null
+  ) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+
+    setSelectedClip({
+      trackType: "text",
+      trackId,
+      clipId,
+    });
+
+    const stage = stageRef.current;
+    if (!stage) return;
+    const sRect = stage.getBoundingClientRect();
+    if (sRect.width <= 0 || sRect.height <= 0) return;
+
+    let initialNormW = effectiveStyle.boxWidth;
+    let initialNormH = effectiveStyle.boxHeight;
+
+    if (elementRef) {
+      const elRect = elementRef.getBoundingClientRect();
+      if (!initialNormW) {
+        initialNormW = Number((elRect.width / sRect.width).toFixed(4));
+      }
+      if (!initialNormH) {
+        initialNormH = Number((elRect.height / sRect.height).toFixed(4));
+      }
+    }
+
+    setTextDragState({
+      trackId,
+      clipId,
+      handle,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      stageRect: {
+        left: sRect.left,
+        top: sRect.top,
+        width: sRect.width,
+        height: sRect.height,
+      },
+      initialNormX: effectiveStyle.position.x,
+      initialNormY: effectiveStyle.position.y,
+      initialNormW: initialNormW || 0.25,
+      initialNormH: initialNormH || 0.08,
+    });
+  };
+
   // Active text clips across all visible textTracks at current playheadTime
   const activeOverlays = textTracks
     .filter((track) => track.visible)
@@ -289,7 +487,6 @@ export const VideoPreviewCanvas: React.FC = () => {
           onClick={(e) => {
             e.stopPropagation();
             setSelectedClip(null);
-            togglePlay();
           }}
           onKeyDown={(e) => {
             const isSpace =
@@ -309,10 +506,9 @@ export const VideoPreviewCanvas: React.FC = () => {
           }}
           onDragLeave={() => setIsPlayerDragOver(false)}
           onDrop={handlePlayerDrop}
-          className={`relative h-full bg-black border overflow-hidden transition-all outline-none cursor-pointer ${
+          className={`relative h-full bg-black border overflow-hidden transition-all outline-none cursor-default ${
             isPlayerDragOver ? "border-[#00c8d2]" : "border-zinc-800"
           }`}
-          title="Click to play / pause video"
         >
           {/* Real or Simulated Video Frame */}
           {resolvedVideoSrc ? (
@@ -369,8 +565,7 @@ export const VideoPreviewCanvas: React.FC = () => {
                     trackId: trackId,
                     clipId: clip.id,
                   });
-                  setDraggingItem({
-                    kind: "overlay",
+                  setOverlayDragItem({
                     trackId: trackId,
                     clipId: clip.id,
                   });
@@ -379,7 +574,7 @@ export const VideoPreviewCanvas: React.FC = () => {
             );
           })}
 
-          {/* Active Text & Bilingual Caption Bounding Boxes (Draggable on Canvas) */}
+          {/* Active Text & Bilingual Caption Bounding Boxes (Draggable & Resizable on Canvas) */}
           {activeOverlays.map(({ track, clip, effectiveStyle }) => {
             const isSelected =
               selectedClip?.trackId === track.id &&
@@ -405,23 +600,29 @@ export const VideoPreviewCanvas: React.FC = () => {
             const boxRadius = bgBox.borderRadius ?? 6;
             const strokeW = effectiveStyle.strokeWidth ?? 0;
 
+            const widthStyle = effectiveStyle.boxWidth
+              ? `${(effectiveStyle.boxWidth * 100).toFixed(2)}%`
+              : "auto";
+            const heightStyle = effectiveStyle.boxHeight
+              ? `${(effectiveStyle.boxHeight * 100).toFixed(2)}%`
+              : "auto";
+
             return (
               <div
                 key={clip.id}
-                onMouseDown={(e) => {
-                  if (e.button !== 0) return;
-                  e.stopPropagation();
-                  setSelectedClip({
-                    trackType: "text",
-                    trackId: track.id,
-                    clipId: clip.id,
-                  });
-                  setDraggingItem({
-                    kind: "text",
-                    trackId: track.id,
-                    clipId: clip.id,
-                  });
+                ref={(el) => {
+                  textElementRefs.current[clip.id] = el;
                 }}
+                onMouseDown={(e) =>
+                  startTextDrag(
+                    e,
+                    track.id,
+                    clip.id,
+                    "move",
+                    effectiveStyle,
+                    textElementRefs.current[clip.id]
+                  )
+                }
                 onClick={(e) => {
                   e.stopPropagation();
                 }}
@@ -429,6 +630,11 @@ export const VideoPreviewCanvas: React.FC = () => {
                   top: topPercent,
                   left: leftPercent,
                   transform: "translate(-50%, -50%)",
+                  width: widthStyle,
+                  height: heightStyle,
+                  boxSizing: "border-box",
+                  maxWidth: "98%",
+                  maxHeight: "98%",
                   fontFamily: resolveCssFontFamily(effectiveStyle.fontFamily),
                   fontSize: `${scaledFontPx}px`,
                   fontWeight: effectiveStyle.bold ? 700 : 500,
@@ -464,6 +670,8 @@ export const VideoPreviewCanvas: React.FC = () => {
                         }`
                       : undefined,
                   paintOrder: "stroke fill",
+                  overflowWrap: "break-word",
+                  wordBreak: "break-word",
                 }}
                 className={`absolute z-20 px-2.5 py-1 cursor-move whitespace-pre-wrap select-none transition-shadow ${
                   isSelected
@@ -474,10 +682,175 @@ export const VideoPreviewCanvas: React.FC = () => {
                 {clip.text}
                 {isSelected && (
                   <>
-                    <span className="w-2 h-2 bg-[#00c8d2] border border-black absolute -top-1 -left-1 rounded-full" />
-                    <span className="w-2 h-2 bg-[#00c8d2] border border-black absolute -top-1 -right-1 rounded-full" />
-                    <span className="w-2 h-2 bg-[#00c8d2] border border-black absolute -bottom-1 -left-1 rounded-full" />
-                    <span className="w-2 h-2 bg-[#00c8d2] border border-black absolute -bottom-1 -right-1 rounded-full" />
+                    {/* 4 Corner Handles (adjusts 2 linked edges) */}
+                    <div
+                      onMouseDown={(e) =>
+                        startTextDrag(
+                          e,
+                          track.id,
+                          clip.id,
+                          "corner-tl",
+                          effectiveStyle,
+                          textElementRefs.current[clip.id]
+                        )
+                      }
+                      className="w-2.5 h-2.5 bg-[#00c8d2] border border-black absolute -top-1.5 -left-1.5 rounded-full cursor-nwse-resize z-30 hover:scale-125 transition-transform"
+                      title="Adjust Top & Left Edges"
+                    />
+                    <div
+                      onMouseDown={(e) =>
+                        startTextDrag(
+                          e,
+                          track.id,
+                          clip.id,
+                          "corner-tr",
+                          effectiveStyle,
+                          textElementRefs.current[clip.id]
+                        )
+                      }
+                      className="w-2.5 h-2.5 bg-[#00c8d2] border border-black absolute -top-1.5 -right-1.5 rounded-full cursor-nesw-resize z-30 hover:scale-125 transition-transform"
+                      title="Adjust Top & Right Edges"
+                    />
+                    <div
+                      onMouseDown={(e) =>
+                        startTextDrag(
+                          e,
+                          track.id,
+                          clip.id,
+                          "corner-bl",
+                          effectiveStyle,
+                          textElementRefs.current[clip.id]
+                        )
+                      }
+                      className="w-2.5 h-2.5 bg-[#00c8d2] border border-black absolute -bottom-1.5 -left-1.5 rounded-full cursor-nesw-resize z-30 hover:scale-125 transition-transform"
+                      title="Adjust Bottom & Left Edges"
+                    />
+                    <div
+                      onMouseDown={(e) =>
+                        startTextDrag(
+                          e,
+                          track.id,
+                          clip.id,
+                          "corner-br",
+                          effectiveStyle,
+                          textElementRefs.current[clip.id]
+                        )
+                      }
+                      className="w-2.5 h-2.5 bg-[#00c8d2] border border-black absolute -bottom-1.5 -right-1.5 rounded-full cursor-nwse-resize z-30 hover:scale-125 transition-transform"
+                      title="Adjust Bottom & Right Edges"
+                    />
+
+                    {/* 4 Edge Handles (adjusts only that edge) */}
+                    <div
+                      onMouseDown={(e) =>
+                        startTextDrag(
+                          e,
+                          track.id,
+                          clip.id,
+                          "edge-top",
+                          effectiveStyle,
+                          textElementRefs.current[clip.id]
+                        )
+                      }
+                      className="w-5 h-1.5 bg-[#00c8d2] border border-black absolute -top-1 left-1/2 -translate-x-1/2 rounded-full cursor-ns-resize z-30 hover:scale-125 transition-transform"
+                      title="Adjust Top Edge"
+                    />
+                    <div
+                      onMouseDown={(e) =>
+                        startTextDrag(
+                          e,
+                          track.id,
+                          clip.id,
+                          "edge-bottom",
+                          effectiveStyle,
+                          textElementRefs.current[clip.id]
+                        )
+                      }
+                      className="w-5 h-1.5 bg-[#00c8d2] border border-black absolute -bottom-1 left-1/2 -translate-x-1/2 rounded-full cursor-ns-resize z-30 hover:scale-125 transition-transform"
+                      title="Adjust Bottom Edge"
+                    />
+                    <div
+                      onMouseDown={(e) =>
+                        startTextDrag(
+                          e,
+                          track.id,
+                          clip.id,
+                          "edge-left",
+                          effectiveStyle,
+                          textElementRefs.current[clip.id]
+                        )
+                      }
+                      className="w-1.5 h-5 bg-[#00c8d2] border border-black absolute top-1/2 -left-1 -translate-y-1/2 rounded-full cursor-ew-resize z-30 hover:scale-125 transition-transform"
+                      title="Adjust Left Edge"
+                    />
+                    <div
+                      onMouseDown={(e) =>
+                        startTextDrag(
+                          e,
+                          track.id,
+                          clip.id,
+                          "edge-right",
+                          effectiveStyle,
+                          textElementRefs.current[clip.id]
+                        )
+                      }
+                      className="w-1.5 h-5 bg-[#00c8d2] border border-black absolute top-1/2 -right-1 -translate-y-1/2 rounded-full cursor-ew-resize z-30 hover:scale-125 transition-transform"
+                      title="Adjust Right Edge"
+                    />
+
+                    {/* Extended Edge Hit Strips for easy pulling */}
+                    <div
+                      onMouseDown={(e) =>
+                        startTextDrag(
+                          e,
+                          track.id,
+                          clip.id,
+                          "edge-top",
+                          effectiveStyle,
+                          textElementRefs.current[clip.id]
+                        )
+                      }
+                      className="absolute -top-1 left-2 right-2 h-2 cursor-ns-resize z-25"
+                    />
+                    <div
+                      onMouseDown={(e) =>
+                        startTextDrag(
+                          e,
+                          track.id,
+                          clip.id,
+                          "edge-bottom",
+                          effectiveStyle,
+                          textElementRefs.current[clip.id]
+                        )
+                      }
+                      className="absolute -bottom-1 left-2 right-2 h-2 cursor-ns-resize z-25"
+                    />
+                    <div
+                      onMouseDown={(e) =>
+                        startTextDrag(
+                          e,
+                          track.id,
+                          clip.id,
+                          "edge-left",
+                          effectiveStyle,
+                          textElementRefs.current[clip.id]
+                        )
+                      }
+                      className="absolute top-2 bottom-2 -left-1 w-2 cursor-ew-resize z-25"
+                    />
+                    <div
+                      onMouseDown={(e) =>
+                        startTextDrag(
+                          e,
+                          track.id,
+                          clip.id,
+                          "edge-right",
+                          effectiveStyle,
+                          textElementRefs.current[clip.id]
+                        )
+                      }
+                      className="absolute top-2 bottom-2 -right-1 w-2 cursor-ew-resize z-25"
+                    />
                   </>
                 )}
               </div>

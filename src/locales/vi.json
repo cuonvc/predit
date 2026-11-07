@@ -98,6 +98,8 @@
     "playbackSpeed": "Tốc độ phát",
     "audioVolume": "Âm lượng",
     "canvasPos": "Vị trí khung hình (X / Y)",
+    "boxSize": "Kích thước khung",
+    "resetSize": "Tự động",
     "fadeInOut": "Hiệu ứng rõ dần / mờ dần (s)",
     "detachAudio": "Tách âm thanh sang Track riêng",
     "muteClip": "Tắt tiếng Clip này",

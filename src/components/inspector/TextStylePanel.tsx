@@ -482,13 +482,48 @@ export const TextStylePanel: React.FC = () => {
                 }
               />
 
-              {/* Position X / Y Readout (Draggable directly on video preview) */}
-              <div className="pt-2 border-t border-[#2a2a2e] flex items-center justify-between text-[11px] text-zinc-500">
-                <span>{t("inspector.canvasPos")}</span>
-                <span className="font-mono text-zinc-300">
-                  X:{effectiveStyle.position.x.toFixed(2)} • Y:
-                  {effectiveStyle.position.y.toFixed(2)}
-                </span>
+              {/* Position X / Y Readout & Box Size (Draggable directly on video preview) */}
+              <div className="pt-2 border-t border-[#2a2a2e] space-y-1 text-[11px] text-zinc-500">
+                <div className="flex items-center justify-between">
+                  <span>{t("inspector.canvasPos")}</span>
+                  <span className="font-mono text-zinc-300">
+                    X:{effectiveStyle.position.x.toFixed(2)} • Y:
+                    {effectiveStyle.position.y.toFixed(2)}
+                  </span>
+                </div>
+                {(effectiveStyle.boxWidth || effectiveStyle.boxHeight) && (
+                  <div className="flex items-center justify-between">
+                    <span>{t("inspector.boxSize")}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-zinc-300">
+                        {effectiveStyle.boxWidth
+                          ? `W:${Math.round(effectiveStyle.boxWidth * 100)}%`
+                          : "W:auto"}
+                        {" • "}
+                        {effectiveStyle.boxHeight
+                          ? `H:${Math.round(effectiveStyle.boxHeight * 100)}%`
+                          : "H:auto"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateTextStyle(
+                            selectedTextTrack.id,
+                            selectedTextClip.id,
+                            {
+                              boxWidth: undefined,
+                              boxHeight: undefined,
+                            }
+                          )
+                        }
+                        className="text-[10px] text-zinc-400 hover:text-[#00c8d2] underline"
+                        title="Reset to auto size"
+                      >
+                        {t("inspector.resetSize")}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </>

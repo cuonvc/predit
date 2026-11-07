@@ -98,6 +98,8 @@
     "playbackSpeed": "Playback Speed",
     "audioVolume": "Audio Volume",
     "canvasPos": "Canvas Position (X / Y)",
+    "boxSize": "Box Dimensions",
+    "resetSize": "Auto Size",
     "fadeInOut": "Fade In / Out (s)",
     "detachAudio": "Detach Audio to Track",
     "muteClip": "Mute Clip Audio",
