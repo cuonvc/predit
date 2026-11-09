@@ -7,4 +7,6 @@ edition.workspace = true
 gpui.workspace = true
 editor_core.workspace = true
 media_engine.workspace = true
+image.workspace = true
+smallvec.workspace = true
 

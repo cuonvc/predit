@@ -13,14 +13,14 @@ pub fn render_canvas_stage(ws: &PreditWorkspace) -> impl IntoElement {
         .iter()
         .filter(|tr| !tr.is_overlay)
         .flat_map(|tr| tr.clips.iter())
-        .find(|c| playhead >= c.start_time && playhead <= c.end_time);
+        .find(|c| playhead + 0.005 >= c.start_time && playhead - 0.005 <= c.end_time);
 
     let active_overlays: Vec<VideoClip> = state
         .video_tracks
         .iter()
         .filter(|tr| tr.is_overlay)
         .flat_map(|tr| tr.clips.iter())
-        .filter(|c| playhead >= c.start_time && playhead <= c.end_time)
+        .filter(|c| playhead + 0.005 >= c.start_time && playhead - 0.005 <= c.end_time)
         .cloned()
         .collect();
 
@@ -48,6 +48,8 @@ pub fn render_canvas_stage(ws: &PreditWorkspace) -> impl IntoElement {
         .justify_center()
         .overflow_hidden()
         .child(render_video_surface(
+            playhead,
+            state.is_playing,
             active_main_video,
             &active_overlays,
             &subtitle_layers,

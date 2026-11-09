@@ -55,9 +55,9 @@ predit/
     │   ├── Cargo.toml
     │   └── src/
     │       ├── lib.rs
-    │       ├── probe.rs                # Media kind classification & FFmpeg binary resolution
-    │       ├── decoder.rs              # Real-time video & PIP overlay frame decoding
-    │       ├── audio_player.rs         # Multi-track synchronized audio playback & Master A/V Clock
+    │       ├── probe.rs                # Media kind classification, cached path normalization, duration probing (MF) & FFmpeg binary resolution
+    │       ├── decoder.rs              # Media Foundation video decode worker: per-clip streams, NV12->BGRA, frame cache, thumbnails
+    │       ├── audio_player.rs         # Multi-track audio via one WinRT MediaPlayer per clip, drift-corrected to the playhead
     │       ├── waveform.rs             # Audio waveform amplitude extraction for timeline visualization
     │       ├── text_renderer.rs        # WYSIWYG TextClip active layer resolver
     │       ├── ass_compiler.rs         # Compiles all text_tracks (EN, VI, Manual) into a UTF-8 .ass subtitle file
@@ -85,7 +85,7 @@ predit/
     │           ├── note_tooltip.rs     # CapCut-styled contextual tooltip badge
     │           ├── timecode_input.rs   # 00:00:00:00 formatted timecode badge
     │           ├── audio_meter.rs      # Real-time dB LED level meter
-    │           └── video_surface.rs    # Custom GPU viewport rendering video frames + PIP + WYSIWYG text overlays
+    │           └── video_surface.rs    # GPU viewport: video frames + PIP + WYSIWYG text overlays, texture cache with drop_image eviction
     │
     └── workspace_ui/                   # [Feature Views] Main Video Editor screens, panels & modals
         ├── Cargo.toml

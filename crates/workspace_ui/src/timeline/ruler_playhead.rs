@@ -62,6 +62,7 @@ pub fn render_ruler_and_playhead(
                         this.history.mutate_transient(|s| {
                             s.playhead_time = new_time;
                         });
+                        this.sync_active_audio();
                         cx.notify();
                     }),
                 )

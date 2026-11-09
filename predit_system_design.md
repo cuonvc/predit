@@ -118,7 +118,15 @@ Instead of treating captions as a rigid, special-case subtitle layer, **manual t
   * If the destination track or time span is occupied by another clip of the same kind, the moving clip automatically **jumps to another line (a higher layer track: `V2 -> V3+`, `Titles 1 -> Titles 2+`)**.
   * Managed non-destructively through `promote_video_clip_to_higher_layer` and `promote_text_clip_to_higher_layer` in `editor_core::operations::clip_move_ops`, with dynamically indexed overlay tracks (`V2`, `V3`, etc.).
 
-### 4.6 Multi-Language UI Architecture (i18n: English & Vietnamese)
+### 4.6 Real-Time Player & Video Surface Architecture (`ui_kit::video_surface`)
+* **Aspect-Ratio Synchronized Viewport:** The player canvas stage dynamically locks to project presets (`16:9`, `9:16`, `3:4`, `1:1`) without artificial column squeezing.
+* **Multi-Format Playback Rendering:**
+  * **Image Media (`MediaKind::Image`):** Rendered natively through GPUI's GPU `img` element with full-bleed or contain scaling.
+  * **Video Media (`MediaKind::Video`):** Displays real-time live playback indicators (`PLAYING` / `PAUSED`), active audio/motion equalizer wave bars, clip-relative elapsed timecodes (`00:03.24 / 00:15.00`), speed multiplier, and a continuous bottom progress bar synced with `playhead_time`.
+  * **Overlays (`active_overlays`):** Image overlays render GPU images at exact normalized `(x, y, scale)` coordinates; video overlays display interactive PIP monitor cards with individual progress bars.
+  * **Subtitles & Text (`subtitle_layers`):** Layered WYSIWYG subtitles with background pills, custom font colors, and selected clip highlight borders.
+
+### 4.7 Multi-Language UI Architecture (i18n: English & Vietnamese)
 
 Predit supports instant switching between **English (`en`)** and **Vietnamese (`vi`)** from the top navigation header (`[EN | VI]`) or Preferences modal.
 
@@ -582,5 +590,6 @@ ffmpeg -y \
 
 ### Phase 5: Quality-of-Life Enhancements (Future / Post-MVP)
 * [ ] **One-Click Silence Removal:** Automatically split and ripple-delete timeline segments where Whisper detects >1.2 seconds of dead air.
-* [ ] **720p/480p Proxy Generation:** Background FFmpeg proxy generation on import for smooth scrubbing of heavy 4K camera files.
+* [x] **Real-Time In-Process Video Frame Decoding (`IMFSourceReader`):** Dedicated MTA worker (`crates/media_engine/src/decoder.rs`) using Windows Media Foundation `IMFSourceReader` (native `MFVideoFormat_NV12` output converted to BGRA only for displayed frames, falling back to `MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING` + `MFVideoFormat_RGB32`) and `gpui::RenderImage` texture caching (`crates/ui_kit/src/primitives/video_surface.rs`) for real-time video playback and timeline scrubbing. Each timeline clip decodes on its own stream (`request_video_frame_for_stream`), seeks decode forward from the preceding keyframe to the exact target frame (the keyframe is shown immediately as a preview, and outdated decodes stop when a newer scrub position arrives), paused jumps repaint once the decoder catches up (`take_stale_frame_flag` / `frame_generation`), frame requests never block the GPUI thread while playing or scrubbing, Media Bin thumbnails are pinned outside the playback LRU (`request_video_thumbnail`), memory is bounded (32 MB decoded-frame budget, 12 textures, max 4 decoder sessions closed after 15 s idle), and evicted textures are released from the sprite atlas via `cx.drop_image`. The playback loop advances `playhead_time` by wall-clock elapsed time.
+* [x] **Synchronized In-Process Audio Playback Engine (`MediaPlayer`):** `crates/media_engine/src/audio_player.rs` using `windows::Media::Playback::MediaPlayer` to output multi-track audio synced to timeline playhead with volume control, speed adjustments, drift correction, and instant pause on stop.
 * [ ] **Vocabulary Highlight Mode:** Highlight specific target English phrases or idioms inside individual `TextClip` nodes using inline style tags.

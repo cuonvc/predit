@@ -203,7 +203,7 @@ pub fn import_main_video_clip(state: &mut TimelineState, file_uri: &str, duratio
     let clean_duration = round2(duration.max(0.5));
     let seq = MEDIA_COUNTER.fetch_add(1, Ordering::Relaxed);
 
-    let Some(main_track) = state.video_tracks.first_mut() else {
+    let Some(main_track) = state.video_tracks.iter_mut().find(|tr| !tr.is_overlay) else {
         return;
     };
     let last_end = main_track.clips.last().map(|c| c.end_time).unwrap_or(0.0);

@@ -10,7 +10,7 @@ Predit is a lightweight, high-performance native desktop video editor built with
 * **Pure Rust + GPUI Multi-Crate Architecture**:
   * `crates/app`: Binary entry point, native OS menus, and window bootstrap.
   * `crates/editor_core`: Pure-Rust domain models, CapCut presets, modular NLE operations (`playhead_ops`, `clip_move_ops`, `text_caption_ops`, `media_import_ops`), `TimelineHistory` Undo/Redo (`Ctrl+Z` / `Ctrl+Y`), and i18n.
-  * `crates/media_engine`: Media probing, FFmpeg decoding, audio master clock, WYSIWYG subtitle layer resolver, UTF-8 `.ass` compiler, hardware acceleration (`DX11` / `Metal`), and MP4 export pipeline.
+  * `crates/media_engine`: Media probing (`IMFSourceReader` `MF_PD_DURATION`), in-process video frame decoding (`IMFSourceReader` native NV12 -> BGRA8 with RGB32 fallback, LRU cache), synchronized in-process audio engine (`windows::Media::Playback::MediaPlayer`, one player per clip) driven by a wall-clock playback loop, WYSIWYG subtitle layer resolver, UTF-8 `.ass` compiler, hardware acceleration (`DX11` / `Metal`), and MP4 export pipeline.
   * `crates/ai_services`: Ephemeral `whisper-cli` subprocess (`ggml-base.bin`), 42-char smart caption chunker, and Groq 20-line batch bilingual translator with HTTP 429 rate-limit countdown.
   * `crates/ui_kit`: Unified UI facade layer, CapCut Dark theme tokens, timecode badge, audio dB LED meter, and GPU video viewport surface.
   * `crates/workspace_ui`: Modular feature panels (`topbar`, `left_sidebar`, `player`, `inspector`, `timeline`, `modals`).
@@ -36,6 +36,7 @@ cargo test -p editor_core -p ai_services -p media_engine
 ```bash
 cargo run -p predit
 ```
+Dev builds compile all third-party crates (GPUI, taffy, windows, ...) with `opt-level = 2` and `media_engine` with `opt-level = 3` (`Cargo.toml`), so timeline scrubbing and playback stay smooth. The first dev build takes ~12 minutes; later rebuilds only recompile workspace crates. On Windows, close Predit before rebuilding (a running `predit.exe` is locked).
 
 ### 4. Build Release Executable
 ```bash

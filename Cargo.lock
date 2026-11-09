@@ -3111,9 +3111,12 @@ version = "2.0.0"
 dependencies = [
  "anyhow",
  "editor_core",
+ "image",
  "serde",
  "serde_json",
+ "smallvec",
  "thiserror 2.0.21",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -5776,7 +5779,9 @@ version = "2.0.0"
 dependencies = [
  "editor_core",
  "gpui",
+ "image",
  "media_engine",
+ "smallvec",
 ]
 
 [[package]]

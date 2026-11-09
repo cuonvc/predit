@@ -94,6 +94,7 @@ pub fn render_player_view(
                                     this.history.mutate_transient(|s| {
                                         s.playhead_time = 0.0;
                                     });
+                                    this.sync_active_audio();
                                     cx.notify();
                                 }))
                                 .child("⏮"),

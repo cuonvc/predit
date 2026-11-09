@@ -387,6 +387,7 @@ pub fn render_timeline_view(
                         this.history.mutate_transient(|s| {
                             s.playhead_time = cursor_sec;
                         });
+                        this.sync_active_audio();
                     }
                     TimelineDragInteraction::ZoomSlider => {}
                     TimelineDragInteraction::MoveClip {

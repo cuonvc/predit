@@ -1,7 +1,11 @@
 use crate::workspace::PreditWorkspace;
 use editor_core::models::MediaKind;
-use gpui::{Context, IntoElement, Render, SharedString, Window, div, prelude::*, px, rgb, rgba};
-use ui_kit::CapCutTheme;
+use gpui::{
+    Context, IntoElement, ObjectFit, Render, SharedString, StyledImage, Window, div, img,
+    prelude::*, px, rgb, rgba,
+};
+use std::path::Path;
+use ui_kit::{CapCutTheme, resolve_thumbnail_render_image};
 
 #[derive(Debug, Clone)]
 pub struct ImportedMediaItem {
@@ -121,29 +125,44 @@ pub fn render_media_card(
                 .justify_center()
                 .overflow_hidden()
                 // Visual preview representation inside card
-                .when(!is_overlay_item && kind == MediaKind::Video, |this| {
-                    this.child(
-                        div()
-                            .w_full()
-                            .h_full()
-                            .bg(rgb(0x27272a))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(
-                                div()
-                                    .w(px(44.0))
-                                    .h(px(44.0))
-                                    .rounded_full()
-                                    .bg(rgb(0x3f3f46))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .text_sm()
-                                    .text_color(rgb(0xe4e4e7))
-                                    .child("🎬"),
-                            ),
-                    )
+                .when(
+                    kind == MediaKind::Image && Path::new(&item.path).exists(),
+                    |this| {
+                        this.child(
+                            img(Path::new(&item.path).to_path_buf())
+                                .w_full()
+                                .h_full()
+                                .object_fit(ObjectFit::Cover),
+                        )
+                    },
+                )
+                .when(kind == MediaKind::Video, |this| {
+                    if let Some(tex) = resolve_thumbnail_render_image(&item.path) {
+                        this.child(img(tex).w_full().h_full().object_fit(ObjectFit::Cover))
+                    } else {
+                        this.child(
+                            div()
+                                .w_full()
+                                .h_full()
+                                .bg(rgb(0x27272a))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(
+                                    div()
+                                        .w(px(44.0))
+                                        .h(px(44.0))
+                                        .rounded_full()
+                                        .bg(rgb(0x3f3f46))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .text_sm()
+                                        .text_color(rgb(0xe4e4e7))
+                                        .child("🎬"),
+                                ),
+                        )
+                    }
                 })
                 // Top-left "OVERLAY" badge on overlay items
                 .when(is_overlay_item, |this| {
@@ -177,10 +196,9 @@ pub fn render_media_card(
                             .text_size(px(10.0))
                             .text_color(rgb(0x091214))
                             .opacity(0.0)
-                            .group_hover(
-                                SharedString::from(format!("media-card-grp-{idx}")),
-                                |s| s.opacity(1.0),
-                            )
+                            .group_hover(SharedString::from(format!("media-card-grp-{idx}")), |s| {
+                                s.opacity(1.0)
+                            })
                             .cursor_pointer()
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.add_media_to_timeline(&pip_path, kind, dur, true);

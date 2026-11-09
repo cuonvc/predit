@@ -134,6 +134,7 @@ pub fn render_audio_video_panel(
                                             }
                                         }
                                     });
+                                    this.sync_active_audio();
                                     cx.notify();
                                 }))
                                 .child(SharedString::from(format!("{:.0}%", vol * 100.0)))
@@ -202,6 +203,7 @@ pub fn render_audio_video_panel(
                                             }
                                         }
                                     });
+                                    this.sync_active_audio();
                                     cx.notify();
                                 }))
                                 .child(SharedString::from(format!("{spd}x")))

@@ -24,6 +24,21 @@ thiserror = "2.0"
 smallvec = "1.15"
 log = "0.4"
 rfd = "0.17"
+image = "0.25"
+windows = { version = "0.61", features = [
+    "Foundation",
+    "Storage",
+    "Storage_Streams",
+    "Media",
+    "Media_Editing",
+    "Media_Playback",
+    "Media_Core",
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_Media_MediaFoundation",
+] }
 
 editor_core = { path = "crates/editor_core" }
 media_engine = { path = "crates/media_engine" }
@@ -37,5 +52,15 @@ debug = false
 
 [profile.dev.package."*"]
 debug = false
+# Optimize all third-party crates (gpui, taffy layout, windows, image, ...) in dev builds.
+# Unoptimized GPUI layout/paint is several times slower, which makes every redraw late:
+# the timeline playhead visibly trails the cursor while scrubbing. Only affects dependency
+# builds (compiled once); workspace crates keep fast incremental rebuilds.
+opt-level = 2
+
+# The video decoder converts/downscales every frame pixel-by-pixel on the CPU; unoptimized
+# builds are too slow to keep up with real-time playback of multiple video tracks.
+[profile.dev.package.media_engine]
+opt-level = 3
 
 

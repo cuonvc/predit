@@ -16,15 +16,16 @@ use editor_core::history::TimelineHistory;
 use editor_core::i18n::I18n;
 use editor_core::models::{BilingualCaptionPair, MediaKind, TrackKind};
 use editor_core::operations::{
-    add_audio_clip, add_overlay_clip, delete_selected_clip,
-    import_main_video_clip, inject_bilingual_text_tracks, split_selected_clip_at_playhead,
-    trim_left_at_playhead, trim_right_at_playhead,
+    add_audio_clip, add_overlay_clip, delete_selected_clip, import_main_video_clip,
+    inject_bilingual_text_tracks, split_selected_clip_at_playhead, trim_left_at_playhead,
+    trim_right_at_playhead,
 };
 use gpui::{
     Context, DragMoveEvent, Empty, FocusHandle, IntoElement, KeyDownEvent, Render, Task, Window,
     div, prelude::*, px, rgb, rgba,
 };
 use media_engine::ass_compiler::compile_unified_ass_file;
+use media_engine::audio_player::{ActiveAudioClipSpec, AudioPlayer};
 use media_engine::probe::classify_media_kind;
 use std::path::PathBuf;
 use ui_kit::CapCutTheme;
@@ -65,6 +66,9 @@ pub struct PreditWorkspace {
     pub export_status_message: String,
     pub rate_limit_countdown_sec: u64,
     pub playback_task: Option<Task<()>>,
+    /// Repaints once the decoder delivers a frame that was still pending during the last render.
+    pub frame_refresh_task: Option<Task<()>>,
+    pub audio_player: AudioPlayer,
 }
 
 impl PreditWorkspace {
@@ -98,7 +102,52 @@ impl PreditWorkspace {
             export_status_message: "Ready to compile UTF-8 .ass & render MP4".into(),
             rate_limit_countdown_sec: 0,
             playback_task: None,
+            frame_refresh_task: None,
+            audio_player: AudioPlayer::new(),
         }
+    }
+
+    /// Pushes every audible clip (V1, V2+ overlays, A1+) to the audio player. The player skips
+    /// muted clips, images, and clips outside the playhead itself.
+    pub fn sync_active_audio(&mut self) {
+        let state = &self.history.present;
+        let video = state.video_tracks.iter().flat_map(|t| &t.clips);
+        let audio = state.audio_tracks.iter().flat_map(|t| &t.clips);
+        let active_clips: Vec<ActiveAudioClipSpec> = video
+            .map(ActiveAudioClipSpec::from)
+            .chain(audio.map(ActiveAudioClipSpec::from))
+            .collect();
+        self.audio_player.sync_timeline_audio(
+            self.history.present.is_playing,
+            self.history.present.playhead_time,
+            &active_clips,
+        );
+    }
+
+    /// Polls the decoder every 16 ms (up to 3 s) and repaints as soon as a new frame is decoded.
+    /// The repaint requests the exact frame again; if it's still not ready the render path
+    /// schedules another refresh.
+    fn schedule_decoded_frame_refresh(&mut self, cx: &mut Context<Self>) {
+        let start_generation = media_engine::decoder::frame_generation();
+        let task = cx.spawn(
+            move |this: gpui::WeakEntity<Self>, cx: &mut gpui::AsyncApp| {
+                let mut async_cx = cx.clone();
+                async move {
+                    let poll = std::time::Duration::from_millis(16);
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                    while media_engine::decoder::frame_generation() == start_generation
+                        && std::time::Instant::now() < deadline
+                    {
+                        async_cx.background_executor().timer(poll).await;
+                    }
+                    let _ = this.update(&mut async_cx, |this, cx| {
+                        this.frame_refresh_task = None;
+                        cx.notify();
+                    });
+                }
+            },
+        );
+        self.frame_refresh_task = Some(task);
     }
 
     pub fn record_drag_undo_checkpoint(&mut self) {
@@ -108,55 +157,87 @@ impl PreditWorkspace {
     pub fn toggle_playback(&mut self, cx: &mut Context<Self>) {
         let was_playing = self.history.present.is_playing;
         let next_playing = !was_playing;
+        let total_dur = get_timeline_total_duration(
+            &self.history.present.video_tracks,
+            &self.history.present.audio_tracks,
+            &self.history.present.text_tracks,
+        )
+        .max(1.0);
         self.history.mutate_transient(|s| {
+            if next_playing && s.playhead_time >= total_dur - 0.05 {
+                s.playhead_time = 0.0;
+            }
             s.is_playing = next_playing;
         });
 
         if next_playing {
-            let task = cx.spawn(|this: gpui::WeakEntity<Self>, cx: &mut gpui::AsyncApp| {
-                let mut async_cx = cx.clone();
-                async move {
-                    let interval = std::time::Duration::from_millis(33);
-                    loop {
-                        async_cx.background_executor().timer(interval).await;
-                        let active = this
-                            .update(&mut async_cx, |this, cx| {
-                                if !this.history.present.is_playing {
-                                    return false;
-                                }
-                                let total_dur = get_timeline_total_duration(
-                                    &this.history.present.video_tracks,
-                                    &this.history.present.audio_tracks,
-                                    &this.history.present.text_tracks,
-                                )
-                                .max(1.0);
+            self.sync_active_audio();
+            let start_playhead = self.history.present.playhead_time;
+            let task = cx.spawn(
+                move |this: gpui::WeakEntity<Self>, cx: &mut gpui::AsyncApp| {
+                    let mut async_cx = cx.clone();
+                    async move {
+                        let interval = std::time::Duration::from_millis(33);
+                        // Wall-clock anchor: the playhead follows real elapsed time, so slow
+                        // frames (decoding, layout) never make the timeline fall behind the
+                        // real-time audio players and trigger constant audio re-seeks.
+                        let mut anchor_instant = std::time::Instant::now();
+                        let mut anchor_playhead = start_playhead;
+                        let mut last_written = start_playhead;
+                        loop {
+                            async_cx.background_executor().timer(interval).await;
+                            let active = this
+                                .update(&mut async_cx, |this, cx| {
+                                    if !this.history.present.is_playing {
+                                        this.audio_player.pause_all();
+                                        return false;
+                                    }
+                                    let total_dur = get_timeline_total_duration(
+                                        &this.history.present.video_tracks,
+                                        &this.history.present.audio_tracks,
+                                        &this.history.present.text_tracks,
+                                    )
+                                    .max(1.0);
 
-                                let next_time = this.history.present.playhead_time + 0.033;
-                                if next_time >= total_dur {
-                                    this.history.mutate_transient(|s| {
-                                        s.is_playing = false;
-                                        s.playhead_time = total_dur;
-                                    });
-                                    cx.notify();
-                                    false
-                                } else {
-                                    this.history.mutate_transient(|s| {
-                                        s.playhead_time = round3(next_time);
-                                    });
-                                    cx.notify();
-                                    true
-                                }
-                            })
-                            .unwrap_or(false);
+                                    // Re-anchor when the user scrubbed / jumped the playhead while playing.
+                                    let current = this.history.present.playhead_time;
+                                    if (current - last_written).abs() > 0.002 {
+                                        anchor_playhead = current;
+                                        anchor_instant = std::time::Instant::now();
+                                    }
+                                    let next_time =
+                                        anchor_playhead + anchor_instant.elapsed().as_secs_f64();
+                                    last_written = round3(next_time);
+                                    if next_time >= total_dur {
+                                        last_written = total_dur;
+                                        this.history.mutate_transient(|s| {
+                                            s.is_playing = false;
+                                            s.playhead_time = total_dur;
+                                        });
+                                        this.audio_player.pause_all();
+                                        cx.notify();
+                                        false
+                                    } else {
+                                        this.history.mutate_transient(|s| {
+                                            s.playhead_time = last_written;
+                                        });
+                                        this.sync_active_audio();
+                                        cx.notify();
+                                        true
+                                    }
+                                })
+                                .unwrap_or(false);
 
-                        if !active {
-                            break;
+                            if !active {
+                                break;
+                            }
                         }
                     }
-                }
-            });
+                },
+            );
             self.playback_task = Some(task);
         } else {
+            self.audio_player.pause_all();
             self.playback_task = None;
         }
         cx.notify();
@@ -218,7 +299,7 @@ impl PreditWorkspace {
         self.history.mutate(|s| {
             if kind == MediaKind::Audio {
                 add_audio_clip(s, path, duration, None);
-            } else if as_overlay || kind == MediaKind::Image {
+            } else if as_overlay {
                 add_overlay_clip(s, path, kind, duration);
             } else {
                 import_main_video_clip(s, path, duration);
@@ -235,7 +316,11 @@ impl PreditWorkspace {
                 .unwrap_or("media")
                 .to_string();
             let kind = classify_media_kind(&path_str);
-            let dur = if kind == MediaKind::Image { 5.0 } else { 15.0 };
+            let default_dur = if kind == MediaKind::Image { 5.0 } else { 15.0 };
+            let dur = media_engine::probe::probe_media_duration(&path_str).unwrap_or(default_dur);
+            if kind == MediaKind::Video {
+                let _ = media_engine::decoder::request_video_thumbnail(&path_str);
+            }
 
             let already_in_bin = self.media_bin.iter().any(|m| m.path == path_str);
             if !already_in_bin {
@@ -349,10 +434,8 @@ impl PreditWorkspace {
         );
         let ass_path = std::env::temp_dir().join("predit_compiled_subtitles.ass");
         if std::fs::write(&ass_path, ass_content.as_bytes()).is_ok() {
-            self.export_status_message = format!(
-                "Compiled UTF-8 .ASS to {}",
-                ass_path.to_string_lossy()
-            );
+            self.export_status_message =
+                format!("Compiled UTF-8 .ASS to {}", ass_path.to_string_lossy());
         } else {
             self.export_status_message = "Failed to write temporary .ASS file.".into();
         }
@@ -360,8 +443,13 @@ impl PreditWorkspace {
 }
 
 impl Render for PreditWorkspace {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Release GPU sprite-atlas memory for video frames evicted from the texture cache.
+        for evicted in ui_kit::drain_evicted_render_images() {
+            cx.drop_image(evicted, Some(window));
+        }
+
+        let root = div()
             .id("predit-workspace-root")
             .track_focus(&self.focus_handle)
             .size_full()
@@ -525,7 +613,9 @@ impl Render for PreditWorkspace {
                                     .h(px(32.0))
                                     .rounded(px(2.0))
                                     .bg(rgb(0x3f3f46))
-                                    .group_hover("grp-split-right", |s| s.bg(CapCutTheme::accent())),
+                                    .group_hover("grp-split-right", |s| {
+                                        s.bg(CapCutTheme::accent())
+                                    }),
                             ),
                     )
                     .child(render_inspector(self, cx)),
@@ -581,6 +671,17 @@ impl Render for PreditWorkspace {
                         .items_center()
                         .child(render_export_modal(self, cx)),
                 )
-            })
+            });
+
+        // A video surface was given a stale frame (exact frame still decoding, e.g. after a seek).
+        // While paused nothing else triggers a repaint, so wait for the decoder and repaint once.
+        if media_engine::decoder::take_stale_frame_flag()
+            && !self.history.present.is_playing
+            && self.frame_refresh_task.is_none()
+        {
+            self.schedule_decoded_frame_refresh(cx);
+        }
+
+        root
     }
 }

@@ -45,7 +45,11 @@ pub fn build_ffmpeg_export_args(
 ) -> ExportCommandPlan {
     let width = timeline.project.resolution.width;
     let height = timeline.project.resolution.height;
-    let main_video = timeline.video_tracks.first().and_then(|t| t.clips.first());
+    let main_video = timeline
+        .video_tracks
+        .iter()
+        .find(|t| !t.is_overlay)
+        .and_then(|t| t.clips.first());
     let bgm_audio = timeline.audio_tracks.first().and_then(|t| t.clips.first());
 
     let mut args = vec!["-y".to_string()];
@@ -124,4 +128,3 @@ pub fn build_ffmpeg_export_args(
         command_preview,
     }
 }
-
