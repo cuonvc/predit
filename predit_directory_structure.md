@@ -47,6 +47,7 @@ predit/
 │   │   ├── timeline/             # MultiTrackTimeline.tsx, TrackRow.tsx, ClipBlock.tsx, Playhead.tsx
 │   │   └── modals/               # Left sidebar tabs & application dialogs
 │   │       ├── AutoCaptionModal.tsx   # Left sidebar shell + AI Captions tab (Monolingual & Bilingual)
+│   │       ├── CaptionProgressModal.tsx # Centered caption pipeline progress modal with full app backdrop blur
 │   │       ├── MediaBinTab.tsx        # Media bin dropzone & imported clips grid tab
 │   │       ├── ManualTextTab.tsx      # Manual titles & text list tab
 │   │       ├── VideoMediaCard.tsx     # Media bin card with hover video/image preview
@@ -85,4 +86,4 @@ predit/
 * **`src/services/tauriBridge.ts`**: The TypeScript bridge that invokes Rust commands to spawn standalone native `ffmpeg` and `whisper-cli` sidecar binaries, ensuring 100% OS memory reclamation upon process exit.
 * **`src/services/groqTranslator.ts`**: Handles batching subtitle lines into groups of 20, sending them to Groq's high-intelligence `openai/gpt-oss-120b` endpoint (with failovers to `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`, and `llama-3.3-70b-versatile`), and handling HTTP 429 rate limits via an automatic countdown pending retry mechanism.
 * **`src/services/assCompiler.ts`**: Generates the Advanced SubStation Alpha (`.ass`) subtitle file from Predit's unified `textTracks` data structure, ensuring Vietnamese diacritics render perfectly via `libass`.
-* **`src/components/modals/AutoCaptionModal.tsx` (`MediaBinTab.tsx`, `ManualTextTab.tsx`, `VideoMediaCard.tsx`, `NoteTooltip.tsx`)**: Left sidebar housing the Media Bin, Manual Titles tab, and AI Captions panel with Monolingual and Bilingual subtitle creation cards, automatic `ggml-base.bin` local transcription, contextual info tooltips, and real-time pending status updates.
+* **`src/components/modals/AutoCaptionModal.tsx` (`MediaBinTab.tsx`, `ManualTextTab.tsx`, `VideoMediaCard.tsx`, `NoteTooltip.tsx`, `CaptionProgressModal.tsx`)**: Left sidebar housing the Media Bin, Manual Titles tab, and AI Captions panel with Monolingual and Bilingual subtitle creation cards, automatic `ggml-base.bin` local transcription, contextual info tooltips, and real-time centered progress modal with application-wide backdrop blur (`CaptionProgressModal.tsx`).

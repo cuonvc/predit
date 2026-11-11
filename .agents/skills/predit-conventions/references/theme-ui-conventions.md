@@ -62,3 +62,8 @@ Timeline clips follow muted video-editing conventions:
 * Right controls: Sync Bilingual Timing (`🔗`) toggle and horizontal zoom slider
 * White vertical playhead line with top capsule marker
 * Left track header width: fixed **`144px`** (`w-36`)
+
+### 3.6 Application Dialogs & Progress Modals
+* **Backdrop Scrim**: `fixed inset-0 z-50 bg-[#0e0e10]/80 backdrop-blur-md` to completely blur the entire workspace underneath modal dialogs.
+* **Modal Card**: Centered `bg-[#18181b] border border-[#2a2a2e] rounded-2xl max-w-md w-full p-6 shadow-2xl`.
+* **Caption Progress Popup (`CaptionProgressModal.tsx`)**: Displays multi-step status (`Audio Extraction` -> `Speech Recognition` -> `Translation / Segmentation` -> `Timeline Track Sync`), live rate-limit retry pending timers in amber (`#f59e0b`), Whisper RAM status, and error states with a clean dismiss action.

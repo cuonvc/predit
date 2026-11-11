@@ -22,6 +22,7 @@ import {
 import { NoteTooltip } from "./NoteTooltip";
 import { MediaBinTab } from "./MediaBinTab";
 import { ManualTextTab } from "./ManualTextTab";
+import { CaptionProgressModal, CaptionStep } from "./CaptionProgressModal";
 
 export const AutoCaptionModal: React.FC = () => {
   const { t } = useTranslation();
@@ -30,6 +31,8 @@ export const AutoCaptionModal: React.FC = () => {
   );
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [currentStep, setCurrentStep] = useState<CaptionStep>("extract");
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pickOverlayModeRef = useRef<boolean>(false);
@@ -276,8 +279,15 @@ export const AutoCaptionModal: React.FC = () => {
       return;
     }
 
+    if (captionTrackMode === "bilingual" && (!groqApiKey || !groqApiKey.trim())) {
+      setStatusMessage("Please enter your Groq API key to translate bilingual captions (or switch to Monolingual).");
+      return;
+    }
+
     const sourceMedia = sourceClip.sourceFile;
     setIsRunning(true);
+    setPipelineError(null);
+    setCurrentStep("extract");
 
     try {
       // Step 1: Extract 16kHz audio via FFmpeg sidecar or Web Audio API
@@ -288,6 +298,7 @@ export const AutoCaptionModal: React.FC = () => {
       );
 
       // Step 2: Transcribe with Local Whisper sidecar (with post-exit RAM purge)
+      setCurrentStep("transcribe");
       setStatusMessage(t("aiCaptions.statusTranscribing"));
       const words = await transcribeWithLocalWhisperSidecar(
         audioPath,
@@ -300,15 +311,13 @@ export const AutoCaptionModal: React.FC = () => {
       }
 
       // Step 3: Smart Caption Segmentation (<=42 chars or >0.45s pause)
+      setCurrentStep(captionTrackMode === "bilingual" ? "translate" : "segment");
       const chunkedSegments = chunkWordsIntoCaptions(words);
 
       let captionPairs: BilingualCaptionPair[];
 
       // Step 4: Translation (ONLY invoked when Bilingual mode is selected)
       if (captionTrackMode === "bilingual") {
-        if (!groqApiKey || !groqApiKey.trim()) {
-          throw new Error("Please enter your Groq API key to translate bilingual captions (or switch to Monolingual).");
-        }
         setStatusMessage(t("aiCaptions.statusTranslating", { current: 1, total: 1 }));
         captionPairs = await translateSegmentsBilingual(
           chunkedSegments,
@@ -341,12 +350,17 @@ export const AutoCaptionModal: React.FC = () => {
       }
 
       // Step 5: Dual-Track or Single-Track Injection into Timeline State
-      injectBilingualTextTracks(captionPairs, captionTrackMode);
+      setCurrentStep("inject");
       setStatusMessage(t("aiCaptions.statusDone"));
+      injectBilingualTextTracks(captionPairs, captionTrackMode);
+      setCurrentStep("done");
+
+      setTimeout(() => {
+        setIsRunning(false);
+      }, 700);
     } catch (err: any) {
+      setPipelineError(err?.message || "Caption pipeline error");
       setStatusMessage(err?.message || "Caption pipeline error");
-    } finally {
-      setIsRunning(false);
     }
   };
 
@@ -570,6 +584,20 @@ export const AutoCaptionModal: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Centered Modal with Fullscreen App Backdrop Blur when Caption Pipeline is Running or Errored */}
+      <CaptionProgressModal
+        isOpen={isRunning}
+        currentStep={currentStep}
+        statusMessage={statusMessage}
+        captionTrackMode={captionTrackMode}
+        sidecarRamStatus={sidecarRamStatus}
+        errorMessage={pipelineError}
+        onClose={() => {
+          setIsRunning(false);
+          setPipelineError(null);
+        }}
+      />
     </aside>
   );
 };

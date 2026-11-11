@@ -4,9 +4,10 @@
 Predit is a lightweight, high-performance cross-platform desktop video editor built with **Tauri v2, React 19, TypeScript, and Rust**.
 
 ## Key Invariants
-1. **CapCut Dark Aesthetic**:
+1. **CapCut Dark Aesthetic & Centered Progress Modals**:
    - Palette: `#0e0e10` (root/stage), `#18181b` (panels), `#222226` (elevated cards), `#27272c` (inputs), `#2a2a2e` (borders), and `#00c8d2` (single cyan/teal accent).
    - Timeline clips: terracotta (`#8c4a32` EN, `#703b28` VI), slate purple (`#5c4b8a` titles), charcoal (`#27272a` video), navy (`#1c3d52` audio).
+   - Caption Generation Progress: Renders a centered modal dialog (`CaptionProgressModal.tsx`) with application-wide background blur (`backdrop-blur-md bg-[#0e0e10]/80`) and real-time step trackers while inference is running.
 2. **Unified Text & Caption Model**:
    - Both AI captions and manual overlays live in `textTracks` as `TextClip` nodes.
    - Dual-track bilingual captions: `track_text_en` (`y: 0.78`) and `track_text_vi` (`y: 0.86`) with synced timing via `linkedGroupId: "pair_{id}"`.

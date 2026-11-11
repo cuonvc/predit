@@ -56,10 +56,11 @@ Always consult the detailed references when modifying core systems:
   * Emit live 1-second countdown ticks to the UI via `onRateLimitPending`.
   * Automatically retry the batch up to 6 times without crashing or losing translation progress.
 
-### 2.5 UI Language Isolation
+### 2.5 UI Language Isolation & Centered Progress Popups
 * The Application Language selector (`EN` / `VI`) **must reside inside the Settings dialog** (`SettingsModal.tsx`), not in the top navigation header.
 * UI language preference is stored in `usePreditConfigStore.ts` and must **never** be stored in the undoable timeline state.
 * All user-facing strings must have corresponding entries in both `src/locales/en.json` and `src/locales/vi.json`.
+* **Caption Generation Progress Popup**: While caption generation is in progress, the UI must render `CaptionProgressModal.tsx` in the center of the screen with a full-window `backdrop-blur-md` and `bg-[#0e0e10]/80` scrim, blurring all app areas and displaying real-time stage progress, rate-limit pending countdowns, and RAM statuses.
 
 ### 2.6 Documentation Synchronization Invariant (STRICT)
 * **Whenever any feature, schema, model configuration, pipeline behavior, UI workflow, or dependency changes in the codebase, all corresponding documentation files MUST be updated in the same turn.**

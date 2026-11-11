@@ -60,7 +60,17 @@
     "statusPurgingRam": "Purging Whisper model from RAM...",
     "statusTranslating": "Translating EN ↔ VI via Groq ({{current}}/{{total}})...",
     "statusRateLimitPending": "Groq rate limit reached{{model}}. Waiting {{seconds}}s to resume ({{current}}/{{total}})...",
-    "statusDone": "Injected bilingual caption tracks!"
+    "statusDone": "Injected bilingual caption tracks!",
+    "progressModalTitle": "Generating Captions",
+    "progressModalSubtitle": "AI speech-to-text and timeline synchronization in progress",
+    "stepExtract": "Audio Extraction (16kHz)",
+    "stepTranscribe": "Speech Recognition (Whisper)",
+    "stepTranslate": "Bilingual Translation (Groq)",
+    "stepSegment": "Caption Segmentation",
+    "stepInject": "Timeline Synchronization",
+    "processNotice": "Processing audio. Please do not close the window.",
+    "pipelineFailed": "Caption Generation Failed",
+    "close": "Close"
   },
   "inspector": {
     "title": "Inspector — Text & Track Style",

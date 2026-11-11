@@ -16,6 +16,7 @@ Predit is a lightweight, high-performance desktop video editor built with **Taur
 * **High-Intelligence Translation Engine with Auto-Pending**:
   * Powered by Groq's cutting-edge models: `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`, and `llama-3.3-70b-versatile`.
   * **HTTP 429 Rate Limit Pending Mechanism**: Automatically detects token limits, counts down second-by-second in the UI, and retries up to 6 times per batch so long videos complete without crashing.
+* **Full-Window Backdrop Blur & Centered Pipeline Modal**: Displays a centered modal (`CaptionProgressModal.tsx`) with application-wide background blur during speech extraction, Whisper transcription, Groq translation, and timeline sync.
 * **Full Application Localization (i18n)**: Instant English and Vietnamese UI switching inside the Settings dialog.
 
 ---

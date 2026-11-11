@@ -31,6 +31,9 @@ This reference defines the 5-step speech-to-text, translation, and export pipeli
   - Monolingual: Spawns 1 text track at standard subtitle position
 ```
 
+### UI Progress Modal & Full-Screen App Blur
+Throughout Steps 1–5, `CaptionProgressModal.tsx` renders a centered modal dialog with an application-wide backdrop blur (`backdrop-blur-md bg-[#0e0e10]/80`). It isolates background controls from user clicks, reports current execution stage and Whisper RAM lifecycle, renders live countdowns on HTTP 429 retries, and smoothly auto-dismisses upon completion.
+
 ---
 
 ## 2. Smart Segmentation Rules (`captionChunker.ts`)

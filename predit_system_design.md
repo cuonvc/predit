@@ -242,6 +242,7 @@ In the **Predit AI Captions Modal (`AutoCaptionModal.tsx`)**, the UI provides a 
   * `Monolingual (Đơn ngữ)` — Transcribes via local Whisper and generates a single track in the video's original speech language (100% offline, zero API key required).
 * **Information Tooltips (`NoteTooltip`):** Clean circular `ⓘ` icons with CapCut dark tooltips explain each mode without cluttering cards.
 * **Groq API Key Input:** Conditionally rendered only when `Bilingual` mode is active.
+* **Centered Progress Modal & Application Blur (`CaptionProgressModal.tsx`):** When caption generation is triggered, a centered popup appears with a fullscreen `backdrop-blur-md` and `bg-[#0e0e10]/80` overlay that blurs all areas of the application. It visually tracks execution steps (Audio Extraction -> Whisper Transcription -> Groq Translation / Segmentation -> Timeline Injection), displays live rate-limit cooldown countdowns, reports ephemeral sidecar RAM status, and isolates user interactions during inference.
 
 ### 5.2 Step-by-Step Execution Flow
 

@@ -60,7 +60,17 @@
     "statusPurgingRam": "Đang giải phóng mô hình Whisper khỏi RAM...",
     "statusTranslating": "Đang dịch Anh ↔ Việt qua Groq ({{current}}/{{total}})...",
     "statusRateLimitPending": "Đạt giới hạn gọi Groq{{model}}. Đang chờ {{seconds}}s để tiếp tục ({{current}}/{{total}})...",
-    "statusDone": "Đã chèn 2 track phụ đề song ngữ!"
+    "statusDone": "Đã chèn 2 track phụ đề song ngữ!",
+    "progressModalTitle": "Đang tạo phụ đề",
+    "progressModalSubtitle": "Đang nhận diện giọng nói và đồng bộ phụ đề vào timeline",
+    "stepExtract": "Trích xuất âm thanh (16kHz)",
+    "stepTranscribe": "Nhận diện giọng nói (Whisper)",
+    "stepTranslate": "Dịch song ngữ (Groq)",
+    "stepSegment": "Phân đoạn phụ đề",
+    "stepInject": "Đồng bộ vào Timeline",
+    "processNotice": "Đang xử lý âm thanh. Vui lòng không đóng cửa sổ.",
+    "pipelineFailed": "Tạo phụ đề thất bại",
+    "close": "Đóng"
   },
   "inspector": {
     "title": "Thuộc tính — Kiểu chữ & Track",
