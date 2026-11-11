@@ -11,20 +11,30 @@ import { extractAudioTo16kWavBlob } from "./mediaUtils";
 const isTauriRuntime = (): boolean =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+export function normalizeToLocalFsPath(uri: string): string {
+  if (!uri) return "";
+  let clean = uri;
+  if (clean.startsWith("http://asset.localhost/")) {
+    clean = decodeURIComponent(clean.replace("http://asset.localhost/", ""));
+  } else if (clean.startsWith("https://asset.localhost/")) {
+    clean = decodeURIComponent(clean.replace("https://asset.localhost/", ""));
+  } else if (clean.startsWith("asset://localhost/")) {
+    clean = decodeURIComponent(clean.replace("asset://localhost/", ""));
+  } else if (clean.startsWith("asset://")) {
+    clean = decodeURIComponent(clean.replace("asset://", ""));
+  }
+  // Windows absolute paths: e.g. "/D:/..." -> "D:/..."
+  if (clean.startsWith("/") && clean.length > 2 && clean[2] === ":") {
+    clean = clean.slice(1);
+  }
+  return clean;
+}
+
 export async function extractAudioViaFfmpegSidecar(
   inputVideoPath: string,
-  mode: "local_whisper" | "groq_cloud"
+  mode: "local_whisper" | "groq_cloud" = "local_whisper"
 ): Promise<string> {
-  // If already an audio file on disk, return directly
-  const ext = inputVideoPath.split(".").pop()?.toLowerCase() || "";
-  const isDirectAudio =
-    !inputVideoPath.startsWith("blob:") &&
-    !inputVideoPath.startsWith("http") &&
-    ["mp3", "wav", "flac", "ogg"].includes(ext);
-
-  if (isDirectAudio) {
-    return inputVideoPath;
-  }
+  const cleanInputPath = normalizeToLocalFsPath(inputVideoPath);
 
   const timestamp = Date.now();
   const filename =
@@ -37,15 +47,59 @@ export async function extractAudioViaFfmpegSidecar(
     try {
       const { tempDir, appCacheDir } = await import("@tauri-apps/api/path");
       const baseDir = await tempDir().catch(() => appCacheDir());
-      outputPath = `${baseDir.replace(/\\/g, "/")}/${filename}`;
+      outputPath = `${baseDir.replace(/[/\\]+$/, "")}/${filename}`.replace(/\\/g, "/");
     } catch {
       // Fallback to relative filename
     }
+
+    // 1. PRIMARY & FASTEST: Execute bundled native FFmpeg sidecar
+    try {
+      const { Command } = await import("@tauri-apps/plugin-shell");
+      const args =
+        mode === "local_whisper"
+          ? [
+              "-y",
+              "-i",
+              cleanInputPath,
+              "-vn",
+              "-acodec",
+              "pcm_s16le",
+              "-ar",
+              "16000",
+              "-ac",
+              "1",
+              outputPath,
+            ]
+          : [
+              "-y",
+              "-i",
+              cleanInputPath,
+              "-vn",
+              "-ac",
+              "1",
+              "-ar",
+              "16000",
+              "-b:a",
+              "64k",
+              outputPath,
+            ];
+
+      const cmd = Command.sidecar("binaries/ffmpeg", args);
+      const output = await cmd.execute();
+
+      if (output.code === 0) {
+        return outputPath;
+      } else {
+        console.warn("FFmpeg sidecar extraction non-zero exit code:", output);
+      }
+    } catch (sidecarErr) {
+      console.warn("FFmpeg sidecar extraction error, falling back to Web Audio API:", sidecarErr);
+    }
   }
 
-  // Pure Web Audio API extraction (decodes audio from video/audio using browser hardware decoder and saves 16kHz WAV)
+  // 2. FALLBACK: Web Audio API (for browser preview when sidecar is not available)
   try {
-    const wavBlob = await extractAudioTo16kWavBlob(inputVideoPath);
+    const wavBlob = await extractAudioTo16kWavBlob(cleanInputPath);
     if (isTauriRuntime()) {
       try {
         const arrayBuffer = await wavBlob.arrayBuffer();
@@ -63,7 +117,7 @@ export async function extractAudioViaFfmpegSidecar(
     console.warn("Web Audio API extraction error:", extractErr);
   }
 
-  return inputVideoPath;
+  return cleanInputPath;
 }
 
 export async function transcribeWithLocalWhisperSidecar(
@@ -285,8 +339,23 @@ export async function transcribeWithGroqCloudWhisper(
 
   let fileBlob: Blob;
   if (typeof audioSource === "string") {
-    // Convert media file to 16kHz WAV Blob
-    fileBlob = await extractAudioTo16kWavBlob(audioSource);
+    if (isTauriRuntime()) {
+      try {
+        const extractedPath = await extractAudioViaFfmpegSidecar(
+          audioSource,
+          "local_whisper"
+        );
+        const { invoke } = await import("@tauri-apps/api/core");
+        const fileBytes = await invoke<number[]>("read_binary_file_safe", {
+          path: extractedPath,
+        });
+        fileBlob = new Blob([new Uint8Array(fileBytes)], { type: "audio/wav" });
+      } catch (err) {
+        fileBlob = await extractAudioTo16kWavBlob(audioSource);
+      }
+    } else {
+      fileBlob = await extractAudioTo16kWavBlob(audioSource);
+    }
   } else {
     fileBlob = audioSource;
   }

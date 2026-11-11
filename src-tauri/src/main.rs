@@ -12,8 +12,12 @@ fn main() {
             commands::verify_sidecar_memory_purged,
             commands::write_utf8_ass_file,
             commands::write_binary_file,
+            commands::read_binary_file_safe,
             commands::read_text_file_safe,
-            commands::check_file_exists
+            commands::check_file_exists,
+            commands::check_nvenc_available,
+            commands::show_in_folder,
+            commands::open_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running Predit Tauri application");

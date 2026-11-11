@@ -136,9 +136,15 @@
     "resolution": "Độ phân giải & Tỷ lệ",
     "encoder": "Bộ mã hóa GPU",
     "assCompiler": "Bộ biên dịch phụ đề",
+    "outputPath": "Vị trí lưu video",
+    "browse": "Duyệt...",
     "startExport": "Bắt đầu xuất FFmpeg",
-    "rendering": "Đang kết xuất predit_output_final.mp4...",
-    "completed": "Xuất video hoàn tất!"
+    "rendering": "Đang kết xuất video...",
+    "completed": "Xuất video hoàn tất thành công!",
+    "openFolder": "Mở thư mục chứa",
+    "openVideo": "Phát video",
+    "noVideoError": "Không tìm thấy video nào trên timeline để xuất.",
+    "exportFailed": "Xuất video thất bại"
   },
   "settings": {
     "title": "Tùy chỉnh & Cấu hình BYOK",

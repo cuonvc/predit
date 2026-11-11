@@ -550,6 +550,12 @@ ffmpeg -y \
   "predit_output_final.mp4"
 ```
 
+### 7.3 Export UI Dialog & File Destination Workflow (`ExportProgressModal.tsx`)
+* **File Destination Picker:** Users can view the exact destination path and click "Browse..." to select any save location and file name via `@tauri-apps/plugin-dialog` (`save`).
+* **Hardware GPU / CPU Encoding:** Automatically selects NVENC (`h264_nvenc`), Apple VideoToolbox (`h264_videotoolbox`), or CPU (`libx264`) based on configuration.
+* **Unified Subtitle Burn-In:** Compiles all active captions and manual text clips into temporary `.ass` and passes it to the native FFmpeg sidecar.
+* **Open File & Show in Folder:** Upon completion, the dialog displays direct "Show in Folder" (opens native Explorer/Finder with the exported video highlighted) and "Play Video" buttons.
+
 ## 8. Phased Implementation Roadmap
 
 ### Phase 1: Predit Foundation, Bilingual UI (i18n) & Multi-Track Timeline Core (Weeks 1–2)

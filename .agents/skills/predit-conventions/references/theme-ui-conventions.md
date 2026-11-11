@@ -67,3 +67,4 @@ Timeline clips follow muted video-editing conventions:
 * **Backdrop Scrim**: `fixed inset-0 z-50 bg-[#0e0e10]/80 backdrop-blur-md` to completely blur the entire workspace underneath modal dialogs.
 * **Modal Card**: Centered `bg-[#18181b] border border-[#2a2a2e] rounded-2xl max-w-md w-full p-6 shadow-2xl`.
 * **Caption Progress Popup (`CaptionProgressModal.tsx`)**: Displays multi-step status (`Audio Extraction` -> `Speech Recognition` -> `Translation / Segmentation` -> `Timeline Track Sync`), live rate-limit retry pending timers in amber (`#f59e0b`), Whisper RAM status, and error states with a clean dismiss action.
+* **Export Progress Modal (`ExportProgressModal.tsx`)**: Renders save location browser, real-time FFmpeg sidecar render progress, and direct completion actions (`Show in Folder` and `Play Video`).

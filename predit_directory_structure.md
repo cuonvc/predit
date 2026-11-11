@@ -52,7 +52,7 @@ predit/
 │   │       ├── ManualTextTab.tsx      # Manual titles & text list tab
 │   │       ├── VideoMediaCard.tsx     # Media bin card with hover video/image preview
 │   │       ├── NoteTooltip.tsx        # CapCut-styled contextual hover tooltip
-│   │       ├── ExportProgressModal.tsx # FFmpeg export configuration & progress modal
+│   │       ├── ExportProgressModal.tsx # FFmpeg export dialog with save path picker, sidecar render & "Show in Folder"
 │   │       └── SettingsModal.tsx      # Application language (EN/VI) & preferences dialog
 │   └── services/                 # Business Logic & Tauri Bridge (Pure TypeScript, React-free)
 │       ├── tauriBridge.ts        # Tauri v2 shell command wrappers for FFmpeg and whisper-cli sidecars

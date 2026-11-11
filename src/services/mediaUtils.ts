@@ -108,7 +108,16 @@ export async function extractAudioTo16kWavBlob(filePath: string): Promise<Blob> 
   const audioCtx = new AudioContextClass();
   let decoded: AudioBuffer;
   try {
-    decoded = await audioCtx.decodeAudioData(arrayBuffer);
+    // Timeout safeguard: Chromium decodeAudioData can hang indefinitely on video containers (MP4/MKV)
+    decoded = await Promise.race([
+      audioCtx.decodeAudioData(arrayBuffer),
+      new Promise<AudioBuffer>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Web Audio decoding timed out on video container")),
+          8000
+        )
+      ),
+    ]);
   } finally {
     audioCtx.close().catch(() => {});
   }

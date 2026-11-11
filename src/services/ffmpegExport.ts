@@ -9,9 +9,11 @@
 
 import { TimelineState } from "../store/useTimelineStore";
 import { HardwareAcceleration } from "../store/usePreditConfigStore";
+import { normalizeToLocalFsPath } from "./tauriBridge";
 
 export function resolveHardwareEncoder(
-  hwPref: HardwareAcceleration
+  hwPref: HardwareAcceleration,
+  hasNvenc = false
 ): { codec: string; extraFlags: string[] } {
   if (hwPref === "cpu") {
     return { codec: "libx264", extraFlags: ["-preset", "veryfast", "-crf", "21"] };
@@ -19,10 +21,16 @@ export function resolveHardwareEncoder(
   if (hwPref === "videotoolbox") {
     return { codec: "h264_videotoolbox", extraFlags: ["-q:v", "65"] };
   }
-  // Default / Auto / NVENC
+  if (hwPref === "nvenc" || (hwPref === "auto" && hasNvenc)) {
+    return {
+      codec: "h264_nvenc",
+      extraFlags: ["-preset", "p4", "-cq", "21"],
+    };
+  }
+  // Universal high-speed CPU x264 fallback (30x+ real-time on desktop CPUs)
   return {
-    codec: "h264_nvenc",
-    extraFlags: ["-preset", "p4", "-cq", "21"],
+    codec: "libx264",
+    extraFlags: ["-preset", "veryfast", "-crf", "21"],
   };
 }
 
@@ -49,13 +57,28 @@ export function buildFfmpegExportArgs(
   assFilePath: string,
   fontsDirPath: string,
   outputFilePath: string,
-  hwAcceleration: HardwareAcceleration
-): { args: string[]; commandPreview: string } {
+  hwAcceleration: HardwareAcceleration,
+  hasNvenc = false
+): { args: string[]; commandPreview: string; codec: string } {
   const { project, videoTracks, audioTracks } = timeline;
   const { width, height } = project.resolution;
 
-  const mainVideoClip = videoTracks[0]?.clips[0];
-  const bgmAudioClip = audioTracks[0]?.clips[0];
+  const rawMainVideoClip = videoTracks[0]?.clips[0];
+  const rawBgmAudioClip = audioTracks[0]?.clips[0];
+
+  const mainVideoClip = rawMainVideoClip
+    ? {
+        ...rawMainVideoClip,
+        sourceFile: normalizeToLocalFsPath(rawMainVideoClip.sourceFile),
+      }
+    : null;
+
+  const bgmAudioClip = rawBgmAudioClip
+    ? {
+        ...rawBgmAudioClip,
+        sourceFile: normalizeToLocalFsPath(rawBgmAudioClip.sourceFile),
+      }
+    : null;
 
   const args: string[] = ["-y"];
 
@@ -76,8 +99,10 @@ export function buildFfmpegExportArgs(
 
   const speed = mainVideoClip?.playbackRate || 1.0;
   const ptsFactor = (1 / speed).toFixed(4);
-  const escapedAss = assFilePath.replace(/\\/g, "/");
-  const escapedFonts = fontsDirPath.replace(/\\/g, "/");
+  const escapedAss = assFilePath.replace(/\\/g, "/").replace(/:/g, "\\:");
+  const escapedFonts = fontsDirPath
+    ? fontsDirPath.replace(/\\/g, "/").replace(/:/g, "\\:")
+    : "";
 
   const filterParts: string[] = [];
 
@@ -85,9 +110,13 @@ export function buildFfmpegExportArgs(
   filterParts.push(
     `[0:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black,setpts=${ptsFactor}*(PTS-STARTPTS)[v_scaled]`
   );
-  filterParts.push(
-    `[v_scaled]ass='${escapedAss}':fontsdir='${escapedFonts}'[v_out]`
-  );
+  if (escapedFonts) {
+    filterParts.push(
+      `[v_scaled]ass='${escapedAss}':fontsdir='${escapedFonts}'[v_out]`
+    );
+  } else {
+    filterParts.push(`[v_scaled]ass='${escapedAss}'[v_out]`);
+  }
 
   // Audio mixing
   const atempoChain = buildChainedAtempo(speed);
@@ -112,7 +141,7 @@ export function buildFfmpegExportArgs(
   }
 
   const filterComplex = filterParts.join(";\n  ");
-  const { codec, extraFlags } = resolveHardwareEncoder(hwAcceleration);
+  const { codec, extraFlags } = resolveHardwareEncoder(hwAcceleration, hasNvenc);
 
   args.push(
     "-filter_complex",
@@ -146,5 +175,5 @@ export function buildFfmpegExportArgs(
     .filter(Boolean)
     .join("\n");
 
-  return { args, commandPreview };
+  return { args, commandPreview, codec };
 }

@@ -136,9 +136,15 @@
     "resolution": "Resolution & Aspect",
     "encoder": "Hardware Encoder",
     "assCompiler": "Subtitle Compiler",
+    "outputPath": "Save Location",
+    "browse": "Browse...",
     "startExport": "Start FFmpeg Render",
-    "rendering": "Rendering predit_output_final.mp4...",
-    "completed": "Export Completed Successfully!"
+    "rendering": "Rendering video...",
+    "completed": "Export Completed Successfully!",
+    "openFolder": "Show in Folder",
+    "openVideo": "Play Video",
+    "noVideoError": "No media found on timeline to export.",
+    "exportFailed": "Export failed"
   },
   "settings": {
     "title": "Preferences & BYOK Configuration",
